@@ -12,6 +12,7 @@
 #endif
 
 #include "recompui/config.h"
+#include "ultramodern/config.hpp"
 #include "recompui/renderer.h"
 #include "rt64_rice_packs.h"
 #include "util/file.h"
@@ -22,6 +23,25 @@ namespace {
 
     bool tabs_added = false;
     bool graphics_options_added = false;
+    bool smooth_aiming_added = false;
+
+    // Smooth Aiming moves the reticle on RT64's frames between the game's, which there are only
+    // with a framerate above the game's 30 (Display, or Manual above 30): otherwise it's greyed
+    // out. temporary: the values being edited in the menu.
+    void update_smooth_aiming_available(bool temporary) {
+        if (!smooth_aiming_added || !graphics_options_added) {
+            return;
+        }
+        recomp::config::Config& graphics = recompui::config::get_graphics_config();
+        auto value = [&](const std::string& id) {
+            return temporary ? graphics.get_temp_option_value(id) : graphics.get_option_value(id);
+        };
+        const auto rate = static_cast<ultramodern::renderer::RefreshRate>(std::get<uint32_t>(value(recompui::config::graphics::options::rr_option)));
+        const double manual = std::get<double>(value(recompui::config::graphics::options::rr_manual_value));
+        const bool above_30 = (rate == ultramodern::renderer::RefreshRate::Display) ||
+            (rate == ultramodern::renderer::RefreshRate::Manual && manual > 30.0);
+        recompui::config::get_config(enhancements_id).update_option_disabled("smooth_aiming", !above_30);
+    }
 
     const std::string screen_filter_id = "screen_filter";
     const std::vector<recomp::config::ConfigOptionEnumOption> screen_filter_options = {
@@ -106,6 +126,12 @@ void snp::config::add_graphics_options(recomp::config::Config& graphics) {
         "Can only be changed before the game starts.",
         true
     );
+    for (const std::string& rate_id : { recompui::config::graphics::options::rr_option, recompui::config::graphics::options::rr_manual_value }) {
+        graphics.add_option_change_callback(rate_id,
+            [](recomp::config::ConfigValueVariant, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext context) {
+                update_smooth_aiming_available(context == recomp::config::OptionChangeContext::Temporary);
+            });
+    }
     graphics.add_option_change_callback(texture_packs_id,
         [](recomp::config::ConfigValueVariant, recomp::config::ConfigValueVariant, recomp::config::OptionChangeContext) {
             snp::config::apply_texture_packs();
@@ -203,13 +229,17 @@ void snp::config::add_extras_tabs() {
     enhancements.add_bool_option(
         "smooth_aiming",
         "Smooth Aiming",
-        "Moves the reticle at your display's framerate, following the mouse, stick, light gun "
-        "or touch as you aim. The game itself still aims 30 times a second, so a shot lands "
-        "at most a 30th of a second from where the reticle shows.",
+        "Moves the reticle smoothly at your display's framerate, like the rest of the picture, "
+        "instead of 30 times a second. It follows your aim slightly behind, as everything else "
+        "on screen does; turn it off for the most direct aim."
+        "<br/><br/>"
+        "Needs a Framerate above Original on the Graphics tab.",
         true
     );
     // On the Controls tab instead (lib-patches/RecompFrontend/0002).
     recompui::config::show_option_on_controls_tab(enhancements_id, "smooth_aiming");
+    smooth_aiming_added = true;
+    update_smooth_aiming_available(false);
     recompui::config::show_option_on_controls_tab(enhancements_id, "analog_aim");
     recompui::config::show_option_on_controls_tab(enhancements_id, "stick_sensitivity");
 

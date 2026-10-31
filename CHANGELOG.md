@@ -9,6 +9,9 @@
 
 ### Changed
 - Crash reports name the GPU, its driver and the graphics API in use.
+- Smooth Aiming is greyed out unless the Framerate is above Original, where
+  it has no in-between frames to move the reticle in. Its description now
+  says it follows your aim slightly behind, like the rest of the picture.
 
 ### Fixed
 - Smooth Aiming had no effect while you aimed, so the reticle moved at 30 fps:
