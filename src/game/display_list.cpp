@@ -12,6 +12,7 @@
 // 300) graphics task's commands of interest are printed as they're walked.
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -327,6 +328,16 @@ namespace {
     // kept after the list's end, for lists the game keeps.
     uint32_t live_id = 0; // this frame's, or 0
     float live_x = 0.0f, live_y = 0.0f; // the reticle: offset from the centre, y up
+    // Where the reticle was at the last few walks, newest first. The game builds a frame's
+    // matrices up to two tasks before its display list goes out, so while the reticle moves its
+    // matrix holds one of these, not where it is now.
+    constexpr uint32_t live_recent_size = 4;
+    float live_recent_x[live_recent_size] = {}, live_recent_y[live_recent_size] = {};
+    uint32_t live_recent_count = 0;
+    // For the Smooth Aiming log: this display list's HUD matrices, how many got the live ID, and
+    // the one nearest the reticle.
+    uint32_t hud_matrices = 0, hud_live = 0;
+    float hud_nearest = -1.0f, hud_nearest_x = 0.0f, hud_nearest_y = 0.0f;
     constexpr uint32_t live_area = 0x807F5000;
     constexpr uint32_t live_banks = 4;
     constexpr uint32_t live_entries = 32;
@@ -360,10 +371,19 @@ namespace {
         const float lrx = px((w0 >> 12) & 0xFFF), lry = (w0 & 0xFFF) / 4.0f;
         const float ulx = px((w1 >> 12) & 0xFFF), uly = (w1 & 0xFFF) / 4.0f;
         const float w = lrx - ulx, h = lry - uly;
-        const float line_x = 160.0f + live_x, line_y = 120.0f - live_y;
-        const bool across = std::fabs((uly + lry) * 0.5f - line_y) <= 2.5f && h <= 3.0f && (w >= 300.0f || w <= 2.0f);
-        const bool down = std::fabs((ulx + lrx) * 0.5f - line_x) <= 2.5f && w <= 3.0f && (h >= 200.0f || h <= 2.0f);
-        if (!across && !down) {
+        // Through one of the reticle's recent positions (the one its frame was built with): its
+        // live ID holds that position, as the reticle's does.
+        bool across = false, down = false;
+        uint32_t lines_id = 0;
+        for (uint32_t i = 0; (i < live_recent_count) && (lines_id == 0); i++) {
+            const float line_x = 160.0f + live_recent_x[i], line_y = 120.0f - live_recent_y[i];
+            across = std::fabs((uly + lry) * 0.5f - line_y) <= 2.5f && h <= 3.0f && (w >= 300.0f || w <= 2.0f);
+            down = std::fabs((ulx + lrx) * 0.5f - line_x) <= 2.5f && w <= 3.0f && (h >= 200.0f || h <= 2.0f);
+            if (across || down) {
+                lines_id = snp::mouse::live_id(0, live_recent_x[i], live_recent_y[i]);
+            }
+        }
+        if (lines_id == 0) {
             return false;
         }
         float left = ulx - 160.0f, right = lrx - 160.0f, top = 120.0f - uly, bottom = 120.0f - lry;
@@ -387,7 +407,7 @@ namespace {
             MEM_W(12, (gpr)(int32_t)v) = (int32_t)0xFFFFFFFF;
         }
         const uint32_t commands[9][2] = {
-            { 0x6400000C, live_id }, // gEXMatrixGroup, pushed
+            { 0x6400000C, lines_id }, // gEXMatrixGroup, pushed
             { still_matrix_params() | 1, 0 },
             { 0xDA380002, live_identity }, // G_MTX: modelview, push, load
             { 0x01004008, entry + live_vertices }, // G_VTX: 4
@@ -778,8 +798,23 @@ namespace {
             instance = 0;
             // The reticle (Smooth Aiming): its matrix puts it where the game has it.
             const float (&row)[4] = modelview[modelview_top].m[3];
-            if (live_id != 0 && std::fabs(row[0] - live_x) < 1.0f && std::fabs(row[1] - live_y) < 1.0f) {
-                id = live_id;
+            hud_matrices++;
+            if (live_id != 0) {
+                const float distance = std::fmax(std::fabs(row[0] - live_x), std::fabs(row[1] - live_y));
+                if (hud_nearest < 0.0f || distance < hud_nearest) {
+                    hud_nearest = distance;
+                    hud_nearest_x = row[0];
+                    hud_nearest_y = row[1];
+                }
+            }
+            bool reticle = false;
+            for (uint32_t i = 0; (live_id != 0) && (i < live_recent_count) && !reticle; i++) {
+                reticle = std::fabs(row[0] - live_recent_x[i]) < 1.0f && std::fabs(row[1] - live_recent_y[i]) < 1.0f;
+            }
+            if (reticle) {
+                // Its ID holds where it's drawn, which the live offset moves it from.
+                id = snp::mouse::live_id(0, row[0], row[1]);
+                hud_live++;
             }
             // A mod's crosshair (src/main/mod_api.cpp).
             else if (uint32_t mod_id = snp_in_front_end_menus() ? 0 : snp::mod_live_reticle_id(row[0], row[1])) {
@@ -1485,7 +1520,31 @@ extern "C" void snp_display_list_hook(uint8_t* rdram, int32_t task) {
     snp_extras_frame(rdram);
     sharp_textures = snp::config::get_sharp_textures();
     sharp_hud = snp::config::get_sharp_hud();
+    if (live_id != 0 || hud_matrices != 0) {
+        if (live_id != 0 && hud_nearest >= 0.0f) {
+            snp::mouse::aim_log("list  reticle at %.2f %.2f: %u HUD matrices, %u with its live ID, nearest at %.2f %.2f (%.2f off)",
+                live_x, live_y, hud_matrices, hud_live, hud_nearest_x, hud_nearest_y, hud_nearest);
+        }
+        else {
+            snp::mouse::aim_log("list  %s: %u HUD matrices", live_id != 0 ? "reticle live but no HUD matrix" : "no live ID", hud_matrices);
+        }
+    }
+    hud_matrices = 0;
+    hud_live = 0;
+    hud_nearest = -1.0f;
     live_id = snp_in_front_end_menus() ? 0 : snp::mouse::live_reticle_id(rdram, live_x, live_y);
+    if (live_id != 0) {
+        for (uint32_t i = live_recent_size - 1; i > 0; i--) {
+            live_recent_x[i] = live_recent_x[i - 1];
+            live_recent_y[i] = live_recent_y[i - 1];
+        }
+        live_recent_x[0] = live_x;
+        live_recent_y[0] = live_y;
+        live_recent_count = std::min(live_recent_count + 1, live_recent_size);
+    }
+    else {
+        live_recent_count = 0;
+    }
     live_bank = (live_bank + 1) % live_banks;
     live_entry = 0;
     if (live_id != 0) {

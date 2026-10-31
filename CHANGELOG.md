@@ -11,6 +11,9 @@
 - Crash reports name the GPU, its driver and the graphics API in use.
 
 ### Fixed
+- Smooth Aiming had no effect while you aimed, so the reticle moved at 30 fps:
+  it only recognised the reticle where it stood still. It now follows the
+  reticle as it moves, crosshair lines included.
 - Windows: when the graphics card's D3D12 driver fails, the game no longer
   crashes on its next buffer upload, and the log says why the driver failed.
 

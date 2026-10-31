@@ -26,6 +26,9 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 
@@ -83,6 +86,29 @@ namespace {
     double now_seconds() {
         using namespace std::chrono;
         return duration<double>(steady_clock::now().time_since_epoch()).count();
+    }
+
+    // Smooth Aiming log, for finding why the reticle isn't smooth: SNP_AIM_LOG=1, or a file
+    // snp-aim-log in the game's folder (on Android the app's storage), then start the game.
+    // Writes snp_aim.log there: each game frame (whether Smooth Aiming steers the reticle, and
+    // where it is), each display list (whether the reticle's matrix got its live ID) and each
+    // displayed frame (the offset RT64 got). 20 MB at most.
+    std::mutex aim_log_mutex;
+    FILE* aim_log_file() {
+        static FILE* file = [] {
+            const char* v = std::getenv("SNP_AIM_LOG");
+            bool on = v != nullptr && v[0] == '1';
+            if (FILE* flag = std::fopen("snp-aim-log", "r")) {
+                std::fclose(flag);
+                on = true;
+            }
+            FILE* f = on ? std::fopen("snp_aim.log", "w") : nullptr;
+            if (on) {
+                std::fprintf(stderr, "Smooth Aiming log: %s\n", f != nullptr ? "on, snp_aim.log" : "couldn't create snp_aim.log");
+            }
+            return f;
+        }();
+        return file;
     }
 
     int SDLCALL watch_events(void*, SDL_Event* event) {
@@ -237,9 +263,14 @@ namespace {
     // Smooth Aiming: what the reticle did this game frame, once the game's
     // and the mouse's changes are in (the velocity is added after the hook).
     void note_reticle(uint8_t* rdram, uint32_t reticle) {
-        const bool steered = snp::config::get_option(snp::config::Option::SmoothAiming) &&
-            !demo_playing(rdram) && !lock_on_mode(rdram, reticle);
+        const bool option = snp::config::get_option(snp::config::Option::SmoothAiming);
+        const bool demo = demo_playing(rdram);
+        const bool lock_on = lock_on_mode(rdram, reticle);
+        const bool steered = option && !demo && !lock_on;
         const double now = now_seconds();
+        snp::mouse::aim_log("game  steered %d (option %d, demo %d, lock-on %d) at %.2f %.2f, velocity %.2f %.2f",
+            steered, option, demo, lock_on, read_float(rdram, reticle + 0x28), read_float(rdram, reticle + 0x2C),
+            read_float(rdram, reticle + 0x58), read_float(rdram, reticle + 0x5C));
         std::lock_guard lock(motion_mutex);
         const double gap = now - live.time;
         if (gap > 0.005 && gap < 0.2) {
@@ -279,14 +310,16 @@ namespace {
 
     // RT64's live offset callback (any thread): where the latest input puts
     // the reticle, from where the game drew it (the ID's position).
-    bool live_offset(uint32_t id, float* dx, float* dy) {
+    bool compute_live_offset(uint32_t id, float* dx, float* dy, const char*& why) {
         uint32_t slot;
         float game_x, game_y;
         snp::mouse::decode_live_id(id, slot, game_x, game_y);
         if (std::fabs(game_x) > 160.0f * snp::get_widescreen_scale() || std::fabs(game_y) > 105.0f) {
+            why = "outside the reticle's reach";
             return false; // not where the reticle can be
         }
         if (slot != 0) {
+            why = "a mod's crosshair";
             return snp::mod_live_offset(slot, game_x, game_y, dx, dy); // a mod's (src/main/mod_api.cpp)
         }
         const snp::config::MouseAim aim = snp::config::get_mouse_aim();
@@ -297,6 +330,7 @@ namespace {
         {
             std::lock_guard lock(motion_mutex);
             if (!live.active || now - live.time > 0.2) {
+                why = !live.active ? "not steered" : "no game frame for 0.2 s";
                 return false;
             }
             const float unit = screen_unit(window_w, window_h);
@@ -305,24 +339,29 @@ namespace {
             // A finger first, as in move_reticle: Point like the mouse in Absolute, Drag like
             // Relative.
             if (finger_aim == snp::mouse::TouchAim::Point && touch.moved) {
+                why = "touch point";
                 x = (touch.x - touch.view_w * 0.5f) / touch_unit;
                 y = (touch.view_h * 0.5f - touch.y) / touch_unit;
             }
             else if (finger_aim == snp::mouse::TouchAim::Drag && (touch.relative_x != 0.0f || touch.relative_y != 0.0f)) {
+                why = "touch drag";
                 const float scale = touch_speed.load() / 100.0f / touch_unit;
                 x = game_x + touch.relative_x * scale;
                 y = game_y - touch.relative_y * scale;
             }
             else if (aim == snp::config::MouseAim::Absolute && pointer_moved) {
+                why = "mouse absolute";
                 x = (pointer_x - window_w * 0.5f) / unit;
                 y = (window_h * 0.5f - pointer_y) / unit;
             }
             else if (aim == snp::config::MouseAim::Relative && (relative_x != 0.0f || relative_y != 0.0f)) {
+                why = "mouse relative";
                 const float scale = sensitivity / 50.0f / unit;
                 x = game_x + relative_x * scale;
                 y = game_y - relative_y * scale;
             }
             else {
+                why = "stick";
                 const float part = (float)std::clamp((now - live.time) / live.period, 0.0, 1.0);
                 x = game_x + live.velocity_x * stick * part;
                 y = game_y + live.velocity_y * stick * part;
@@ -331,12 +370,47 @@ namespace {
         x = clamp_x(x);
         y = clamp_y(y);
         if (!std::isfinite(x) || !std::isfinite(y)) {
+            why = "not a number";
             return false;
         }
         *dx = x - game_x;
         *dy = y - game_y;
         return true;
     }
+
+    bool live_offset(uint32_t id, float* dx, float* dy) {
+        const char* why = "";
+        const bool moved = compute_live_offset(id, dx, dy, why);
+        uint32_t slot;
+        float game_x, game_y;
+        snp::mouse::decode_live_id(id, slot, game_x, game_y);
+        if (moved) {
+            snp::mouse::aim_log("shown drawn at %.2f %.2f (slot %u), moved %.2f %.2f (%s)", game_x, game_y, slot, *dx, *dy, why);
+        }
+        else {
+            snp::mouse::aim_log("shown drawn at %.2f %.2f (slot %u), not moved (%s)", game_x, game_y, slot, why);
+        }
+        return moved;
+    }
+}
+
+void snp::mouse::aim_log(const char* format, ...) {
+    FILE* file = aim_log_file();
+    if (file == nullptr) {
+        return;
+    }
+    static const double start = now_seconds();
+    std::lock_guard lock(aim_log_mutex);
+    if (std::ftell(file) > 20L * 1024 * 1024) {
+        return;
+    }
+    std::fprintf(file, "%9.4f ", now_seconds() - start);
+    va_list args;
+    va_start(args, format);
+    std::vfprintf(file, format, args);
+    va_end(args);
+    std::fputc('\n', file);
+    std::fflush(file);
 }
 
 // Smooth Aiming, for the display list (src/game/display_list.cpp): the live ID

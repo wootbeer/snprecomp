@@ -32,6 +32,10 @@ namespace snp::mouse {
     // reticle, 1-3 mods' crosshairs (src/main/mod_api.cpp).
     uint32_t live_id(uint32_t slot, float x, float y);
     void decode_live_id(uint32_t id, uint32_t& slot, float& x, float& y);
+
+    // The Smooth Aiming log (SNP_AIM_LOG=1 or a file snp-aim-log; src/main/mouse.cpp), a line
+    // with the time; does nothing when it's off.
+    void aim_log(const char* format, ...);
 }
 
 #endif
