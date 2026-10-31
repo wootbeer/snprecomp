@@ -252,6 +252,8 @@ void snp::mouse::touch_aim_move(float x, float y) {
 }
 
 void snp::mouse::init() {
+    // The Smooth Aiming log's file appears now, not at its first line in play.
+    snp::mouse::aim_log("Smooth Aiming log on (game, list and shown lines start in a level)");
     SDL_AddEventWatch(watch_events, nullptr);
     recompinput::set_game_mouse_callback(game_mouse);
     RT64::setLiveOffsetCallback(live_offset);
