@@ -77,6 +77,10 @@ namespace {
         bool active = false; // in play, steered by the player
         uint32_t reticle = 0; // its struct
         float velocity_x = 0.0f, velocity_y = 0.0f; // the stick's, per game frame
+        // Where the game puts it this frame (the velocity is added after the hook). The frame on
+        // screen was usually built a frame or two before, so motion is measured from here, not
+        // from where it was drawn: otherwise it steps at the game's rate.
+        float newest_x = 0.0f, newest_y = 0.0f;
         double time = 0.0; // when the game moved it, in seconds
         double period = 1.0 / 30.0; // between the game's frames
     } live;
@@ -285,6 +289,11 @@ namespace {
         if (!std::isfinite(live.velocity_x) || !std::isfinite(live.velocity_y)) {
             live.velocity_x = live.velocity_y = 0.0f;
         }
+        live.newest_x = read_float(rdram, reticle + 0x28) + live.velocity_x;
+        live.newest_y = read_float(rdram, reticle + 0x2C) + live.velocity_y;
+        if (!std::isfinite(live.newest_x) || !std::isfinite(live.newest_y)) {
+            live.newest_x = live.newest_y = 0.0f;
+        }
         live.time = now;
     }
 
@@ -348,8 +357,8 @@ namespace {
             else if (finger_aim == snp::mouse::TouchAim::Drag && (touch.relative_x != 0.0f || touch.relative_y != 0.0f)) {
                 why = "touch drag";
                 const float scale = touch_speed.load() / 100.0f / touch_unit;
-                x = game_x + touch.relative_x * scale;
-                y = game_y - touch.relative_y * scale;
+                x = live.newest_x + touch.relative_x * scale;
+                y = live.newest_y - touch.relative_y * scale;
             }
             else if (aim == snp::config::MouseAim::Absolute && pointer_moved) {
                 why = "mouse absolute";
@@ -359,14 +368,14 @@ namespace {
             else if (aim == snp::config::MouseAim::Relative && (relative_x != 0.0f || relative_y != 0.0f)) {
                 why = "mouse relative";
                 const float scale = sensitivity / 50.0f / unit;
-                x = game_x + relative_x * scale;
-                y = game_y - relative_y * scale;
+                x = live.newest_x + relative_x * scale;
+                y = live.newest_y - relative_y * scale;
             }
             else {
                 why = "stick";
                 const float part = (float)std::clamp((now - live.time) / live.period, 0.0, 1.0);
-                x = game_x + live.velocity_x * stick * part;
-                y = game_y + live.velocity_y * stick * part;
+                x = live.newest_x + live.velocity_x * stick * part;
+                y = live.newest_y + live.velocity_y * stick * part;
             }
         }
         x = clamp_x(x);
