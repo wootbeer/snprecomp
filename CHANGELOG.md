@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.9 Beta] - 2026-10-31
 
 ### Added
 - Windows: Graphics API on the Graphics tab (Auto, D3D12 or Vulkan). Try

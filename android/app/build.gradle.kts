@@ -44,8 +44,8 @@ android {
         minSdk = 28
         targetSdk = 35
         // The same version name as the PC release it matches.
-        versionCode = 6
-        versionName = "0.2.8"
+        versionCode = 7
+        versionName = "0.2.9"
 
         ndk {
             abiFilters += "arm64-v8a"
