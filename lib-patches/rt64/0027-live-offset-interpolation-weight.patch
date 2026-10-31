@@ -1,0 +1,72 @@
+--- a/src/render/rt64_live_offset.h
++++ b/src/render/rt64_live_offset.h
+@@ -15,8 +15,11 @@
+     constexpr uint32_t LiveOffsetIdTag = 0x5E000000u;
+ 
+     // Called from the renderer's thread for each such ID, once per displayed
+-    // frame; returns false to leave it where the game drew it.
+-    typedef bool (*LiveOffsetCallback)(uint32_t id, float *dx, float *dy);
++    // frame; returns false to leave it where the game drew it. weight is the
++    // frame's interpolation weight (0: the previous game frame, 1: this one),
++    // the one every interpolated object moves by: frames are rendered ahead of
++    // being shown, so the time of the call isn't the time they're shown.
++    typedef bool (*LiveOffsetCallback)(uint32_t id, float weight, float *dx, float *dy);
+ 
+     void setLiveOffsetCallback(LiveOffsetCallback callback);
+     LiveOffsetCallback getLiveOffsetCallback();
+--- a/src/render/rt64_transform_processor.cpp
++++ b/src/render/rt64_transform_processor.cpp
+@@ -36,10 +36,11 @@
+     }
+ 
+     void TransformProcessor::process(const ProcessParams &p) {
+-        // This frame's live offsets, asked for once per ID.
++        // This frame's live offsets, asked for once per ID and weight (the current frame's, and the
++        // previous frame's for the previous matrices).
+         const LiveOffsetCallback liveCallback = getLiveOffsetCallback();
+-        std::unordered_map<uint32_t, hlslpp::float2> liveOffsets;
+-        auto applyLiveOffset = [&](const DrawData &drawData, size_t t, hlslpp::float4x4 &matrix) {
++        std::unordered_map<uint32_t, hlslpp::float2> liveOffsets[2];
++        auto applyLiveOffset = [&](const DrawData &drawData, size_t t, hlslpp::float4x4 &matrix, bool previous) {
+             if ((liveCallback == nullptr) || (t >= drawData.worldTransformGroups.size())) {
+                 return;
+             }
+@@ -51,13 +52,14 @@
+             if ((id & LiveOffsetIdMask) != LiveOffsetIdTag) {
+                 return;
+             }
+-            auto it = liveOffsets.find(id);
+-            if (it == liveOffsets.end()) {
++            std::unordered_map<uint32_t, hlslpp::float2> &offsets = liveOffsets[previous ? 1 : 0];
++            auto it = offsets.find(id);
++            if (it == offsets.end()) {
+                 float dx = 0.0f, dy = 0.0f;
+-                if (!liveCallback(id, &dx, &dy)) {
++                if (!liveCallback(id, previous ? p.prevFrameWeight : p.curFrameWeight, &dx, &dy)) {
+                     dx = dy = 0.0f;
+                 }
+-                it = liveOffsets.emplace(id, hlslpp::float2(dx, dy)).first;
++                it = offsets.emplace(id, hlslpp::float2(dx, dy)).first;
+             }
+             matrix[3][0] += it->second.x;
+             matrix[3][1] += it->second.y;
+@@ -87,8 +89,8 @@
+                         const hlslpp::float4x4 &curTransform = drawData.worldTransforms[t];
+                         prevMatrix = transformMap.rigidBody.lerp(p.prevFrameWeight, prevTransform, curTransform, true);
+                         curMatrix = transformMap.rigidBody.lerp(p.curFrameWeight, prevTransform, curTransform, true);
+-                        applyLiveOffset(drawData, t, prevMatrix);
+-                        applyLiveOffset(drawData, t, curMatrix);
++                        applyLiveOffset(drawData, t, prevMatrix, true);
++                        applyLiveOffset(drawData, t, curMatrix, false);
+                         invMatrix = hlslpp::inverse(curMatrix);
+                         invTMatrix = hlslpp::transpose(invMatrix);
+                         lerpWorldTransforms.emplace_back(curMatrix);
+@@ -97,7 +99,7 @@
+                     }
+                     else {
+                         curMatrix = drawData.worldTransforms[t];
+-                        applyLiveOffset(drawData, t, curMatrix);
++                        applyLiveOffset(drawData, t, curMatrix, false);
+                         invMatrix = hlslpp::inverse(curMatrix);
+                         invTMatrix = hlslpp::transpose(invMatrix);
+                         lerpWorldTransforms.emplace_back(curMatrix);

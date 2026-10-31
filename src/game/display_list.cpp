@@ -381,6 +381,9 @@ namespace {
             down = std::fabs((ulx + lrx) * 0.5f - line_x) <= 2.5f && w <= 3.0f && (h >= 200.0f || h <= 2.0f);
             if (across || down) {
                 lines_id = snp::mouse::live_id(0, live_recent_x[i], live_recent_y[i]);
+                if (i + 1 < live_recent_count) {
+                    snp::mouse::set_live_previous(lines_id, live_recent_x[i + 1], live_recent_y[i + 1]);
+                }
             }
         }
         if (lines_id == 0) {
@@ -807,13 +810,19 @@ namespace {
                     hud_nearest_y = row[1];
                 }
             }
-            bool reticle = false;
-            for (uint32_t i = 0; (live_id != 0) && (i < live_recent_count) && !reticle; i++) {
-                reticle = std::fabs(row[0] - live_recent_x[i]) < 1.0f && std::fabs(row[1] - live_recent_y[i]) < 1.0f;
+            int32_t reticle = -1; // the recent position it's drawn at
+            for (uint32_t i = 0; (live_id != 0) && (i < live_recent_count) && (reticle < 0); i++) {
+                if (std::fabs(row[0] - live_recent_x[i]) < 1.0f && std::fabs(row[1] - live_recent_y[i]) < 1.0f) {
+                    reticle = (int32_t)i;
+                }
             }
-            if (reticle) {
-                // Its ID holds where it's drawn, which the live offset moves it from.
+            if (reticle >= 0) {
+                // Its ID holds where it's drawn; the live offset moves it there from where it was
+                // drawn the frame before (the next older position).
                 id = snp::mouse::live_id(0, row[0], row[1]);
+                if ((uint32_t)reticle + 1 < live_recent_count) {
+                    snp::mouse::set_live_previous(id, live_recent_x[reticle + 1], live_recent_y[reticle + 1]);
+                }
                 hud_live++;
             }
             // A mod's crosshair (src/main/mod_api.cpp).

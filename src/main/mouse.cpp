@@ -8,12 +8,12 @@
 // velocity is added, the mouse moves it (snp.jp.toml), only on frames the mouse
 // moved, so a controller aims as before in between.
 //
-// Smooth Aiming: the renderer moves the reticle (and its crosshair lines) on
-// every displayed frame to where the latest input puts it (live_offset), from
-// where the game drew it on its last frame. Pointers (the mouse in Absolute,
-// light guns and Wiimotes acting as one, touch) give the position itself; the
-// mouse in Relative adds the motion the game hasn't taken yet, and the stick
-// carries on at the game's velocity for the part of a frame gone by.
+// Smooth Aiming: the reticle (and its crosshair lines) is drawn without RT64's
+// interpolation, so the lines (fill rectangles, which RT64 can't move) stay on
+// it; instead the renderer moves it on every displayed frame (live_offset) from
+// where it was drawn in the game's previous frame to where it is in this one,
+// by the frame's interpolation weight, as RT64 moves everything else. Whatever
+// aims it (mouse, stick, light gun, touch), it follows a game frame behind.
 //
 // Mouse buttons are bound like keys on the Controls tab
 // (lib-patches/RecompFrontend/0008, defaults in src/main/input_defaults.cpp).
@@ -23,6 +23,7 @@
 #include "snp_mouse.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -77,15 +78,20 @@ namespace {
         bool active = false; // in play, steered by the player
         uint32_t reticle = 0; // its struct
         float velocity_x = 0.0f, velocity_y = 0.0f; // the stick's, per game frame
-        // Where the game puts it this frame (the velocity is added after the hook). The frame on
-        // screen was usually built a frame or two before, so motion is measured from here, not
-        // from where it was drawn: otherwise it steps at the game's rate.
-        float newest_x = 0.0f, newest_y = 0.0f;
         double time = 0.0; // when the game moved it, in seconds
         double period = 1.0 / 30.0; // between the game's frames
     } live;
 
-    bool live_offset(uint32_t id, float* dx, float* dy);
+    // Where each live ID's reticle (or crosshair line) was drawn in the game frame before
+    // (snp::mouse::set_live_previous, from the display list walk), under motion_mutex.
+    struct LivePrevious {
+        uint32_t id = 0;
+        float x = 0.0f, y = 0.0f;
+    };
+    std::array<LivePrevious, 16> live_previous;
+    uint32_t live_previous_next = 0;
+
+    bool live_offset(uint32_t id, float weight, float* dx, float* dy);
 
     double now_seconds() {
         using namespace std::chrono;
@@ -289,11 +295,6 @@ namespace {
         if (!std::isfinite(live.velocity_x) || !std::isfinite(live.velocity_y)) {
             live.velocity_x = live.velocity_y = 0.0f;
         }
-        live.newest_x = read_float(rdram, reticle + 0x28) + live.velocity_x;
-        live.newest_y = read_float(rdram, reticle + 0x2C) + live.velocity_y;
-        if (!std::isfinite(live.newest_x) || !std::isfinite(live.newest_y)) {
-            live.newest_x = live.newest_y = 0.0f;
-        }
         live.time = now;
     }
 
@@ -319,9 +320,11 @@ namespace {
         return (q >= half ? q - 2 * half : q) / 4.0f;
     }
 
-    // RT64's live offset callback (any thread): where the latest input puts
-    // the reticle, from where the game drew it (the ID's position).
-    bool compute_live_offset(uint32_t id, float* dx, float* dy, const char*& why) {
+    // RT64's live offset callback (any thread): for the reticle, the offset that puts it between
+    // where it was drawn in the previous game frame and in this one (the ID's position) by the
+    // frame's interpolation weight, as RT64 moves every other object. RT64 renders its frames
+    // ahead of showing them, so following the latest input at the time of the call made it jump.
+    bool compute_live_offset(uint32_t id, float weight, float* dx, float* dy, const char*& why) {
         uint32_t slot;
         float game_x, game_y;
         snp::mouse::decode_live_id(id, slot, game_x, game_y);
@@ -333,76 +336,65 @@ namespace {
             why = "a mod's crosshair";
             return snp::mod_live_offset(slot, game_x, game_y, dx, dy); // a mod's (src/main/mod_api.cpp)
         }
-        const snp::config::MouseAim aim = snp::config::get_mouse_aim();
-        const float sensitivity = snp::config::get_mouse_sensitivity();
-        const float stick = snp::config::get_stick_sensitivity() / 100.0f;
-        const double now = now_seconds();
-        float x = game_x, y = game_y;
+        float previous_x = 0.0f, previous_y = 0.0f;
         {
             std::lock_guard lock(motion_mutex);
-            if (!live.active || now - live.time > 0.2) {
+            if (!live.active || now_seconds() - live.time > 0.2) {
                 why = !live.active ? "not steered" : "no game frame for 0.2 s";
                 return false;
             }
-            const float unit = screen_unit(window_w, window_h);
-            const snp::mouse::TouchAim finger_aim = touch_aim.load();
-            const float touch_unit = screen_unit(touch.view_w, touch.view_h);
-            // A finger first, as in move_reticle: Point like the mouse in Absolute, Drag like
-            // Relative.
-            if (finger_aim == snp::mouse::TouchAim::Point && touch.moved) {
-                why = "touch point";
-                x = (touch.x - touch.view_w * 0.5f) / touch_unit;
-                y = (touch.view_h * 0.5f - touch.y) / touch_unit;
+            bool found = false;
+            for (const LivePrevious& p : live_previous) {
+                if (p.id == id) {
+                    previous_x = p.x;
+                    previous_y = p.y;
+                    found = true;
+                    break;
+                }
             }
-            else if (finger_aim == snp::mouse::TouchAim::Drag && (touch.relative_x != 0.0f || touch.relative_y != 0.0f)) {
-                why = "touch drag";
-                const float scale = touch_speed.load() / 100.0f / touch_unit;
-                x = live.newest_x + touch.relative_x * scale;
-                y = live.newest_y - touch.relative_y * scale;
-            }
-            else if (aim == snp::config::MouseAim::Absolute && pointer_moved) {
-                why = "mouse absolute";
-                x = (pointer_x - window_w * 0.5f) / unit;
-                y = (window_h * 0.5f - pointer_y) / unit;
-            }
-            else if (aim == snp::config::MouseAim::Relative && (relative_x != 0.0f || relative_y != 0.0f)) {
-                why = "mouse relative";
-                const float scale = sensitivity / 50.0f / unit;
-                x = live.newest_x + relative_x * scale;
-                y = live.newest_y - relative_y * scale;
-            }
-            else {
-                why = "stick";
-                const float part = (float)std::clamp((now - live.time) / live.period, 0.0, 1.0);
-                x = live.newest_x + live.velocity_x * stick * part;
-                y = live.newest_y + live.velocity_y * stick * part;
+            if (!found) {
+                why = "no previous position";
+                return false;
             }
         }
-        x = clamp_x(x);
-        y = clamp_y(y);
-        if (!std::isfinite(x) || !std::isfinite(y)) {
+        const float rest = 1.0f - std::clamp(weight, 0.0f, 1.0f);
+        *dx = (previous_x - game_x) * rest;
+        *dy = (previous_y - game_y) * rest;
+        if (!std::isfinite(*dx) || !std::isfinite(*dy)) {
             why = "not a number";
             return false;
         }
-        *dx = x - game_x;
-        *dy = y - game_y;
+        why = "interpolated";
         return true;
     }
 
-    bool live_offset(uint32_t id, float* dx, float* dy) {
+    bool live_offset(uint32_t id, float weight, float* dx, float* dy) {
         const char* why = "";
-        const bool moved = compute_live_offset(id, dx, dy, why);
+        const bool moved = compute_live_offset(id, weight, dx, dy, why);
         uint32_t slot;
         float game_x, game_y;
         snp::mouse::decode_live_id(id, slot, game_x, game_y);
         if (moved) {
-            snp::mouse::aim_log("shown drawn at %.2f %.2f (slot %u), moved %.2f %.2f (%s)", game_x, game_y, slot, *dx, *dy, why);
+            snp::mouse::aim_log("shown drawn at %.2f %.2f (slot %u), weight %.2f, moved %.2f %.2f (%s)", game_x, game_y, slot, weight, *dx, *dy, why);
         }
         else {
-            snp::mouse::aim_log("shown drawn at %.2f %.2f (slot %u), not moved (%s)", game_x, game_y, slot, why);
+            snp::mouse::aim_log("shown drawn at %.2f %.2f (slot %u), weight %.2f, not moved (%s)", game_x, game_y, slot, weight, why);
         }
         return moved;
     }
+}
+
+void snp::mouse::set_live_previous(uint32_t id, float previous_x, float previous_y) {
+    std::lock_guard lock(motion_mutex);
+    for (LivePrevious& p : live_previous) {
+        if (p.id == id) {
+            p.x = previous_x;
+            p.y = previous_y;
+            return;
+        }
+    }
+    live_previous[live_previous_next] = { id, previous_x, previous_y };
+    live_previous_next = (live_previous_next + 1) % (uint32_t)live_previous.size();
 }
 
 void snp::mouse::aim_log(const char* format, ...) {
