@@ -9,14 +9,14 @@
 
 ### Changed
 - Crash reports name the GPU, its driver and the graphics API in use.
-- Smooth Aiming is greyed out unless the Framerate is above Original, where
-  it has no in-between frames to move the reticle in. Its description now
-  says it follows your aim slightly behind, like the rest of the picture.
+- Smooth Aiming is off by default: it now moves the reticle like the rest of
+  the picture, which trails your aim slightly. It's greyed out unless the
+  Framerate is above Original, where it has no in-between frames to work in.
 
 ### Fixed
 - Smooth Aiming had no effect while you aimed, so the reticle moved at 30 fps:
-  it only recognised the reticle where it stood still. It now follows the
-  reticle as it moves, crosshair lines included.
+  it only recognised the reticle where it stood still. It now moves it
+  smoothly between the game's frames, with the crosshair lines kept on it.
 - Windows: when the graphics card's D3D12 driver fails, the game no longer
   crashes on its next buffer upload, and the log says why the driver failed.
 

@@ -234,7 +234,7 @@ void snp::config::add_extras_tabs() {
         "on screen does; turn it off for the most direct aim."
         "<br/><br/>"
         "Needs a Framerate above Original on the Graphics tab.",
-        true
+        false // off by default: the slight lag is felt aiming with a mouse
     );
     // On the Controls tab instead (lib-patches/RecompFrontend/0002).
     recompui::config::show_option_on_controls_tab(enhancements_id, "smooth_aiming");

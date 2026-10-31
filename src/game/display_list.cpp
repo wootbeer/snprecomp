@@ -339,6 +339,13 @@ namespace {
     // the one nearest the reticle.
     uint32_t hud_matrices = 0, hud_live = 0;
     int32_t hud_frame = -1, lines_frame = -1; // which recent frame the reticle and its lines matched
+    uint32_t lines_aligned = 0; // crosshair lines moved onto the reticle's frame (align_crosshair_lines)
+    // This walk's crosshair line quads and the recent frame each was drawn from.
+    struct LinesEntry {
+        uint32_t entry;
+        int32_t frame;
+    };
+    std::vector<LinesEntry> lines_entries;
     float hud_nearest = -1.0f, hud_nearest_x = 0.0f, hud_nearest_y = 0.0f;
     constexpr uint32_t live_area = 0x807F5000;
     constexpr uint32_t live_banks = 4;
@@ -413,6 +420,7 @@ namespace {
         }
         const uint32_t entry = live_lists + (live_bank * live_entries + live_entry) * live_entry_bytes;
         live_entry++;
+        lines_entries.push_back({ entry, best });
         const float corners[4][2] = { { left, top }, { left, bottom }, { right, bottom }, { right, top } };
         for (uint32_t i = 0; i < 4; i++) {
             const uint32_t v = entry + live_vertices + i * 16;
@@ -438,6 +446,36 @@ namespace {
         }
         set_command(rdram, addr, 0xDE000000, entry);
         return true;
+    }
+
+    // After the walk: crosshair lines the game drew from another frame's position than the
+    // reticle's matrix (now and then it draws them from a newer one) are moved onto the reticle
+    // and given its live ID, so both follow one path between the game's frames instead of two
+    // (a ghost).
+    void align_crosshair_lines(uint8_t* rdram) {
+        if (hud_frame >= 0) {
+            const uint32_t id = snp::mouse::live_id(0, live_recent_x[hud_frame], live_recent_y[hud_frame]);
+            for (const LinesEntry& lines : lines_entries) {
+                if (lines.frame == hud_frame) {
+                    continue;
+                }
+                const int32_t shift_x = (int32_t)std::lround(live_recent_x[hud_frame] - live_recent_x[lines.frame]);
+                const int32_t shift_y = (int32_t)std::lround(live_recent_y[hud_frame] - live_recent_y[lines.frame]);
+                for (uint32_t i = 0; i < 4; i++) {
+                    const uint32_t v = lines.entry + live_vertices + i * 16;
+                    const uint32_t xy = (uint32_t)MEM_W(0, (gpr)(int32_t)v);
+                    const int16_t x = (int16_t)((int16_t)(xy >> 16) + shift_x);
+                    const int16_t y = (int16_t)((int16_t)(xy & 0xFFFF) + shift_y);
+                    MEM_W(0, (gpr)(int32_t)v) = (int32_t)(((uint32_t)(uint16_t)x << 16) | (uint16_t)y);
+                }
+                set_command(rdram, lines.entry, 0x6400000C, id);
+                lines_aligned++;
+            }
+            if ((uint32_t)hud_frame + 1 < live_recent_count) {
+                snp::mouse::set_live_previous(id, live_recent_x[hud_frame + 1], live_recent_y[hud_frame + 1]);
+            }
+        }
+        lines_entries.clear();
     }
 
     // The warehouse in the intro (the soldiers among the crates) has its two
@@ -1548,8 +1586,8 @@ extern "C" void snp_display_list_hook(uint8_t* rdram, int32_t task) {
     sharp_hud = snp::config::get_sharp_hud();
     if (live_id != 0 || hud_matrices != 0) {
         if (live_id != 0 && hud_nearest >= 0.0f) {
-            snp::mouse::aim_log("list  reticle at %.2f %.2f: %u HUD matrices, %u with its live ID, nearest at %.2f %.2f (%.2f off); matched frames back: reticle %d, lines %d",
-                live_x, live_y, hud_matrices, hud_live, hud_nearest_x, hud_nearest_y, hud_nearest, hud_frame, lines_frame);
+            snp::mouse::aim_log("list  reticle at %.2f %.2f: %u HUD matrices, %u with its live ID, nearest at %.2f %.2f (%.2f off); matched frames back: reticle %d, lines %d (%u lines moved onto the reticle)",
+                live_x, live_y, hud_matrices, hud_live, hud_nearest_x, hud_nearest_y, hud_nearest, hud_frame, lines_frame, lines_aligned);
         }
         else {
             snp::mouse::aim_log("list  %s: %u HUD matrices", live_id != 0 ? "reticle live but no HUD matrix" : "no live ID", hud_matrices);
@@ -1559,6 +1597,7 @@ extern "C" void snp_display_list_hook(uint8_t* rdram, int32_t task) {
     hud_live = 0;
     hud_frame = -1;
     lines_frame = -1;
+    lines_aligned = 0;
     hud_nearest = -1.0f;
     live_id = snp_in_front_end_menus() ? 0 : snp::mouse::live_reticle_id(rdram, live_x, live_y);
     live_recent_count = (live_id != 0) ? snp::mouse::recent_reticle_positions(live_recent_x, live_recent_y, live_recent_size) : 0;
@@ -1606,6 +1645,7 @@ extern "C" void snp_display_list_hook(uint8_t* rdram, int32_t task) {
     modelview[0] = identity_matrix();
     walk(rdram, dl, 0, widen, true);
     end_fill_run(rdram);
+    align_crosshair_lines(rdram);
     number_tagged_instances(rdram);
     // After switching from Expand back to Original, the strips outside the
     // inset keep the wide picture (the game never clears them): the first
