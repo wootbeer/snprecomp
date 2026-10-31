@@ -328,15 +328,17 @@ namespace {
     // kept after the list's end, for lists the game keeps.
     uint32_t live_id = 0; // this frame's, or 0
     float live_x = 0.0f, live_y = 0.0f; // the reticle: offset from the centre, y up
-    // Where the reticle was at the last few walks, newest first. The game builds a frame's
-    // matrices up to two tasks before its display list goes out, so while the reticle moves its
-    // matrix holds one of these, not where it is now.
-    constexpr uint32_t live_recent_size = 4;
+    // Where the game drew the reticle in its last few frames, newest first (from
+    // src/main/mouse.cpp, recorded every game frame). The game builds a frame's matrices up to
+    // two tasks before its display list goes out, so while the reticle moves its matrix holds one
+    // of these, not where it is now; the next older one is where it was drawn the frame before.
+    constexpr uint32_t live_recent_size = 6;
     float live_recent_x[live_recent_size] = {}, live_recent_y[live_recent_size] = {};
     uint32_t live_recent_count = 0;
     // For the Smooth Aiming log: this display list's HUD matrices, how many got the live ID, and
     // the one nearest the reticle.
     uint32_t hud_matrices = 0, hud_live = 0;
+    int32_t hud_frame = -1, lines_frame = -1; // which recent frame the reticle and its lines matched
     float hud_nearest = -1.0f, hud_nearest_x = 0.0f, hud_nearest_y = 0.0f;
     constexpr uint32_t live_area = 0x807F5000;
     constexpr uint32_t live_banks = 4;
@@ -380,6 +382,7 @@ namespace {
             across = std::fabs((uly + lry) * 0.5f - line_y) <= 2.5f && h <= 3.0f && (w >= 300.0f || w <= 2.0f);
             down = std::fabs((ulx + lrx) * 0.5f - line_x) <= 2.5f && w <= 3.0f && (h >= 200.0f || h <= 2.0f);
             if (across || down) {
+                lines_frame = (int32_t)i;
                 lines_id = snp::mouse::live_id(0, live_recent_x[i], live_recent_y[i]);
                 if (i + 1 < live_recent_count) {
                     snp::mouse::set_live_previous(lines_id, live_recent_x[i + 1], live_recent_y[i + 1]);
@@ -820,6 +823,7 @@ namespace {
                 // Its ID holds where it's drawn; the live offset moves it there from where it was
                 // drawn the frame before (the next older position).
                 id = snp::mouse::live_id(0, row[0], row[1]);
+                hud_frame = reticle;
                 if ((uint32_t)reticle + 1 < live_recent_count) {
                     snp::mouse::set_live_previous(id, live_recent_x[reticle + 1], live_recent_y[reticle + 1]);
                 }
@@ -1531,8 +1535,8 @@ extern "C" void snp_display_list_hook(uint8_t* rdram, int32_t task) {
     sharp_hud = snp::config::get_sharp_hud();
     if (live_id != 0 || hud_matrices != 0) {
         if (live_id != 0 && hud_nearest >= 0.0f) {
-            snp::mouse::aim_log("list  reticle at %.2f %.2f: %u HUD matrices, %u with its live ID, nearest at %.2f %.2f (%.2f off)",
-                live_x, live_y, hud_matrices, hud_live, hud_nearest_x, hud_nearest_y, hud_nearest);
+            snp::mouse::aim_log("list  reticle at %.2f %.2f: %u HUD matrices, %u with its live ID, nearest at %.2f %.2f (%.2f off); matched frames back: reticle %d, lines %d",
+                live_x, live_y, hud_matrices, hud_live, hud_nearest_x, hud_nearest_y, hud_nearest, hud_frame, lines_frame);
         }
         else {
             snp::mouse::aim_log("list  %s: %u HUD matrices", live_id != 0 ? "reticle live but no HUD matrix" : "no live ID", hud_matrices);
@@ -1540,20 +1544,11 @@ extern "C" void snp_display_list_hook(uint8_t* rdram, int32_t task) {
     }
     hud_matrices = 0;
     hud_live = 0;
+    hud_frame = -1;
+    lines_frame = -1;
     hud_nearest = -1.0f;
     live_id = snp_in_front_end_menus() ? 0 : snp::mouse::live_reticle_id(rdram, live_x, live_y);
-    if (live_id != 0) {
-        for (uint32_t i = live_recent_size - 1; i > 0; i--) {
-            live_recent_x[i] = live_recent_x[i - 1];
-            live_recent_y[i] = live_recent_y[i - 1];
-        }
-        live_recent_x[0] = live_x;
-        live_recent_y[0] = live_y;
-        live_recent_count = std::min(live_recent_count + 1, live_recent_size);
-    }
-    else {
-        live_recent_count = 0;
-    }
+    live_recent_count = (live_id != 0) ? snp::mouse::recent_reticle_positions(live_recent_x, live_recent_y, live_recent_size) : 0;
     live_bank = (live_bank + 1) % live_banks;
     live_entry = 0;
     if (live_id != 0) {

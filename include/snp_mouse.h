@@ -33,6 +33,10 @@ namespace snp::mouse {
     uint32_t live_id(uint32_t slot, float x, float y);
     void decode_live_id(uint32_t id, uint32_t& slot, float& x, float& y);
 
+    // Smooth Aiming: where the game drew the reticle in its last frames, newest first (up to
+    // max); returns how many.
+    uint32_t recent_reticle_positions(float* xs, float* ys, uint32_t max);
+
     // Smooth Aiming: where the reticle (or a crosshair line) with this live ID was drawn in the
     // game frame before, which RT64 moves it from (src/game/display_list.cpp).
     void set_live_previous(uint32_t id, float previous_x, float previous_y);

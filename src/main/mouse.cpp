@@ -91,6 +91,13 @@ namespace {
     std::array<LivePrevious, 16> live_previous;
     uint32_t live_previous_next = 0;
 
+    // Where the game drew the reticle in its last few frames, newest first (under motion_mutex):
+    // recorded every game frame, so the display list walk matches the reticle's matrix (built a
+    // frame or two before its list goes out) and the frame before it exactly.
+    constexpr uint32_t reticle_drawn_size = 8;
+    std::array<float, reticle_drawn_size> reticle_drawn_x{}, reticle_drawn_y{};
+    uint32_t reticle_drawn_count = 0;
+
     bool live_offset(uint32_t id, float weight, float* dx, float* dy);
 
     double now_seconds() {
@@ -274,6 +281,9 @@ static void move_reticle(uint8_t* rdram, uint32_t reticle);
 namespace {
     // Smooth Aiming: what the reticle did this game frame, once the game's
     // and the mouse's changes are in (the velocity is added after the hook).
+    float clamp_x(float x);
+    float clamp_y(float y);
+
     void note_reticle(uint8_t* rdram, uint32_t reticle) {
         const bool option = snp::config::get_option(snp::config::Option::SmoothAiming);
         const bool demo = demo_playing(rdram);
@@ -296,6 +306,19 @@ namespace {
             live.velocity_x = live.velocity_y = 0.0f;
         }
         live.time = now;
+
+        // Where it's drawn this frame: the game adds the velocity after the hook, then clamps.
+        const float drawn_x = clamp_x(read_float(rdram, reticle + 0x28) + live.velocity_x);
+        const float drawn_y = clamp_y(read_float(rdram, reticle + 0x2C) + live.velocity_y);
+        if (std::isfinite(drawn_x) && std::isfinite(drawn_y)) {
+            for (uint32_t i = reticle_drawn_size - 1; i > 0; i--) {
+                reticle_drawn_x[i] = reticle_drawn_x[i - 1];
+                reticle_drawn_y[i] = reticle_drawn_y[i - 1];
+            }
+            reticle_drawn_x[0] = drawn_x;
+            reticle_drawn_y[0] = drawn_y;
+            reticle_drawn_count = std::min(reticle_drawn_count + 1, reticle_drawn_size);
+        }
     }
 
     // The reticle's reach (func_800AB924 clamps it to this after moving it).
@@ -382,6 +405,16 @@ namespace {
         }
         return moved;
     }
+}
+
+uint32_t snp::mouse::recent_reticle_positions(float* xs, float* ys, uint32_t max) {
+    std::lock_guard lock(motion_mutex);
+    const uint32_t count = std::min(max, reticle_drawn_count);
+    for (uint32_t i = 0; i < count; i++) {
+        xs[i] = reticle_drawn_x[i];
+        ys[i] = reticle_drawn_y[i];
+    }
+    return count;
 }
 
 void snp::mouse::set_live_previous(uint32_t id, float previous_x, float previous_y) {
