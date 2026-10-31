@@ -375,22 +375,32 @@ namespace {
         const float w = lrx - ulx, h = lry - uly;
         // Through one of the reticle's recent positions (the one its frame was built with): its
         // live ID holds that position, as the reticle's does.
+        // The closest one, not the first: moving slowly, two frames' positions can both be within
+        // the 2.5 pixels, and the reticle and its lines would take different paths (a ghost).
+        const bool across_shape = h <= 3.0f && (w >= 300.0f || w <= 2.0f);
+        const bool down_shape = w <= 3.0f && (h >= 200.0f || h <= 2.0f);
         bool across = false, down = false;
-        uint32_t lines_id = 0;
-        for (uint32_t i = 0; (i < live_recent_count) && (lines_id == 0); i++) {
+        int32_t best = -1;
+        float best_distance = 2.5f;
+        for (uint32_t i = 0; i < live_recent_count; i++) {
             const float line_x = 160.0f + live_recent_x[i], line_y = 120.0f - live_recent_y[i];
-            across = std::fabs((uly + lry) * 0.5f - line_y) <= 2.5f && h <= 3.0f && (w >= 300.0f || w <= 2.0f);
-            down = std::fabs((ulx + lrx) * 0.5f - line_x) <= 2.5f && w <= 3.0f && (h >= 200.0f || h <= 2.0f);
-            if (across || down) {
-                lines_frame = (int32_t)i;
-                lines_id = snp::mouse::live_id(0, live_recent_x[i], live_recent_y[i]);
-                if (i + 1 < live_recent_count) {
-                    snp::mouse::set_live_previous(lines_id, live_recent_x[i + 1], live_recent_y[i + 1]);
-                }
+            const float across_distance = across_shape ? std::fabs((uly + lry) * 0.5f - line_y) : 1e9f;
+            const float down_distance = down_shape ? std::fabs((ulx + lrx) * 0.5f - line_x) : 1e9f;
+            const float distance = std::fmin(across_distance, down_distance);
+            if (distance <= best_distance && (best < 0 || distance < best_distance)) {
+                best = (int32_t)i;
+                best_distance = distance;
+                across = across_distance <= 2.5f;
+                down = down_distance <= 2.5f;
             }
         }
-        if (lines_id == 0) {
+        if (best < 0) {
             return false;
+        }
+        lines_frame = best;
+        const uint32_t lines_id = snp::mouse::live_id(0, live_recent_x[best], live_recent_y[best]);
+        if ((uint32_t)best + 1 < live_recent_count) {
+            snp::mouse::set_live_previous(lines_id, live_recent_x[best + 1], live_recent_y[best + 1]);
         }
         float left = ulx - 160.0f, right = lrx - 160.0f, top = 120.0f - uly, bottom = 120.0f - lry;
         if (across && w >= 300.0f) {
@@ -813,10 +823,13 @@ namespace {
                     hud_nearest_y = row[1];
                 }
             }
-            int32_t reticle = -1; // the recent position it's drawn at
-            for (uint32_t i = 0; (live_id != 0) && (i < live_recent_count) && (reticle < 0); i++) {
-                if (std::fabs(row[0] - live_recent_x[i]) < 1.0f && std::fabs(row[1] - live_recent_y[i]) < 1.0f) {
+            int32_t reticle = -1; // the recent position it's drawn at (the closest, within 1 unit)
+            float reticle_distance = 1.0f;
+            for (uint32_t i = 0; (live_id != 0) && (i < live_recent_count); i++) {
+                const float distance = std::fmax(std::fabs(row[0] - live_recent_x[i]), std::fabs(row[1] - live_recent_y[i]));
+                if (distance < reticle_distance) {
                     reticle = (int32_t)i;
+                    reticle_distance = distance;
                 }
             }
             if (reticle >= 0) {
