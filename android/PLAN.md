@@ -400,3 +400,18 @@ picture appears.
 
 Released in 0.2.8 (versionCode 6) with the co-op mod API, the multiplayer keyboard fix and the
 Windows zip's Visual C++ runtime; the Mali user's result is still to come.
+
+0.2.8 on that device (log): "Vulkan descriptor indexing: partially bound 0, variable count 0, runtime
+array 0, non-uniform sampled images 0": no descriptor indexing at all, and every game shader still
+fails. RT64's raster shaders declare `gTextures[8192]` and `gTMEM[8192]` (FbRendererCommon.hlsli);
+without partially bound / variable count bindings every slot counts against the driver's limits,
+and RT64 has no mode for that (its descriptorIndexing capability only shows in the debug UI). The
+shader library's own pipelines compile, so the launcher works. Making it work would mean RT64
+binding a small per-frame set of textures: not attempted (big, and testable only on such a device).
+
+plume 0010 logs the GPU's limits ("Vulkan limits: sampled images N per stage, ..."). rt64 0028
+records whether the device has descriptor indexing and whether every ubershader pipeline failed
+(rt64_device_summary.h); the display list walk then shows a warning once (SDL message box, OK and
+the game carries on) naming the GPU. Never shown where the game draws. README and android/README
+list descriptor indexing in the requirements.
+

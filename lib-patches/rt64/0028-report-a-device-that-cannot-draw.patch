@@ -1,0 +1,75 @@
+--- a/src/hle/rt64_application.cpp
++++ b/src/hle/rt64_application.cpp
+@@ -6,6 +6,7 @@
+ #include "rhi/rt64_render_hooks.h"
+ #include "render/rt64_device_summary.h"
+ 
++#include <atomic>
+ #include <cinttypes>
+ #include <cstdio>
+ #include <filesystem>
+@@ -42,6 +43,21 @@
+         return deviceSummary;
+     }
+ 
++    static std::atomic<bool> deviceDescriptorIndexing{ true };
++    static std::atomic<bool> ubershadersFailed{ false };
++
++    bool getDeviceDescriptorIndexing() {
++        return deviceDescriptorIndexing.load();
++    }
++
++    bool getUbershadersFailed() {
++        return ubershadersFailed.load();
++    }
++
++    void setUbershadersFailed() {
++        ubershadersFailed.store(true);
++    }
++
+     // Constants
+ 
+     static std::unique_ptr<RenderInterface> CreateVulkanInterfaceWrapper(RenderWindow renderWindow) {
+@@ -318,6 +334,7 @@
+             }
+ 
+             setDeviceSummary(deviceDescription.name.c_str(), deviceDescription.driverVersion, apiName);
++            deviceDescriptorIndexing.store(device->getCapabilities().descriptorIndexing);
+         }
+ 
+         // Detect if the application should use HDR framebuffers or not.
+--- a/src/render/rt64_device_summary.h
++++ b/src/render/rt64_device_summary.h
+@@ -8,4 +8,11 @@
+     // The GPU, its driver and the graphics API the renderer set up with, as one line (empty
+     // before that), for the host's crash reports. Safe to read from a signal handler.
+     const char *getDeviceSummary();
++
++    // Whether the device has descriptor indexing, which the game's shaders need (their texture
++    // arrays have thousands of slots), and whether every ubershader pipeline failed to compile:
++    // both together mean the game can't draw on this device, for the host to say so.
++    bool getDeviceDescriptorIndexing();
++    bool getUbershadersFailed();
++    void setUbershadersFailed();
+ };
+--- a/src/render/rt64_raster_shader.cpp
++++ b/src/render/rt64_raster_shader.cpp
+@@ -3,6 +3,7 @@
+ //
+ 
+ #include "rt64_raster_shader.h"
++#include "rt64_device_summary.h"
+ 
+ #include "xxHash/xxh3.h"
+ 
+@@ -605,6 +606,10 @@
+                 fprintf(stderr, "[RT64] %u of %u ubershader pipelines failed to compile; draws wait for their own shaders instead.\n",
+                     failedCount, uint32_t(std::size(pipelines)));
+             }
++
++            if (failedCount == uint32_t(std::size(pipelines))) {
++                setUbershadersFailed();
++            }
+         }
+     }
+ 

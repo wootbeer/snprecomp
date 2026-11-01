@@ -46,7 +46,8 @@ then Run.
 From a terminal instead: `gradlew assembleDebug` in `android/` (the APK lands in
 `app/build/outputs/apk/debug/`).
 
-Requirements: Android 9 or newer (API 28), 64-bit ARM, Vulkan.
+Requirements: Android 9 or newer (API 28), 64-bit ARM, Vulkan with descriptor indexing (RT64's game
+shaders declare texture arrays of 8192; older Mali GPUs such as the G52 lack it, see PLAN.md).
 
 The ROM is chosen in the game's launcher: **Load ROM** opens the system file picker
 (.z64, .v64 or .n64; the Japanese ROM or the English translation, as on desktop). It's

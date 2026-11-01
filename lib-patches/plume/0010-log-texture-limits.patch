@@ -1,0 +1,14 @@
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -4124,6 +4124,11 @@
+         fprintf(stderr, "Vulkan descriptor indexing: partially bound %d, variable count %d, runtime array %d, non-uniform sampled images %d%s.\n",
+             indexingFeatures.descriptorBindingPartiallyBound, indexingFeatures.descriptorBindingVariableDescriptorCount, indexingFeatures.runtimeDescriptorArray,
+             indexingFeatures.shaderSampledImageArrayNonUniformIndexing, nonUniformSampledImageIndexing ? "" : " (shaders made uniform)");
++        // How many textures a shader may use: without descriptor indexing, all of an array's slots
++        // count (RT64's game shaders declare 8192).
++        const VkPhysicalDeviceLimits &limits = physicalDeviceProperties.limits;
++        fprintf(stderr, "Vulkan limits: sampled images %u per stage, %u per set; resources %u per stage; %u descriptor sets.\n",
++            limits.maxPerStageDescriptorSampledImages, limits.maxDescriptorSetSampledImages, limits.maxPerStageResources, limits.maxBoundDescriptorSets);
+         if (descriptorIndexingSupported) {
+             indexingFeatures.pNext = createDeviceChain;
+             createDeviceChain = &indexingFeatures;

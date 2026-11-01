@@ -64,8 +64,10 @@ Get the latest build from the [Releases](https://github.com/wootbeer/snprecomp/r
 
 - **Android:** install `SnPRecompiled-<version>-android.apk` (allow installs
   from your browser or file manager when asked). Needs Android 9 or newer, a
-  64-bit ARM device and Vulkan. On first start, **Load ROM** opens the system
-  file picker; the ROM is copied into the app, so it's needed only once.
+  64-bit ARM device and Vulkan with descriptor indexing: older Mali GPUs, like
+  the Mali-G52, lack it and show a black screen. On first start, **Load ROM**
+  opens the system file picker; the ROM is copied into the app, so it's needed
+  only once.
 
 On Steam Deck, in Desktop Mode, use **Add to Steam** on the launcher (or "Add a
 Non-Steam Game" in Steam), then play it from Gaming Mode.

@@ -16,10 +16,17 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "recomp.h"
+#include "rt64_device_summary.h"
+#ifdef _WIN32
+#include "SDL.h"
+#else
+#include "SDL2/SDL.h"
+#endif
 
 #include "snp_config.h"
 #include "snp_mod_api.h"
@@ -1600,6 +1607,18 @@ extern "C" void snp_display_list_hook(uint8_t* rdram, int32_t task) {
     lines_aligned = 0;
     hud_nearest = -1.0f;
     live_id = snp_in_front_end_menus() ? 0 : snp::mouse::live_reticle_id(rdram, live_x, live_y);
+
+    // A GPU without descriptor indexing whose driver refused every game shader (an older Mali,
+    // issue 17) shows nothing in play: say why once, instead of a silent black screen. The game
+    // carries on as before after OK.
+    static bool unsupported_gpu_told = false;
+    if (!unsupported_gpu_told && RT64::getUbershadersFailed() && !RT64::getDeviceDescriptorIndexing()) {
+        unsupported_gpu_told = true;
+        const std::string message = std::string("Your GPU (") + RT64::getDeviceSummary() + ") lacks a Vulkan feature "
+            "the game's renderer needs (descriptor indexing), so the game can't draw on this device: you'll hear "
+            "it, but the screen stays black.\n\nOlder Mali GPUs, like the Mali-G52, are known to lack it.";
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Sin and Punishment Recompiled", message.c_str(), nullptr);
+    }
     live_recent_count = (live_id != 0) ? snp::mouse::recent_reticle_positions(live_recent_x, live_recent_y, live_recent_size) : 0;
     live_bank = (live_bank + 1) % live_banks;
     live_entry = 0;
