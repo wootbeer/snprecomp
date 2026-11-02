@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.10 Beta] - 2026-11-02
 
 ### Added
 - Maximum Score, Invincible and Infinite Air Jumps on the Cheats tab, from the
@@ -13,6 +13,9 @@
   the Mali-G52, which lack Vulkan descriptor indexing), the game says so once
   instead of leaving a silent black screen. The log also lists the GPU's
   texture limits.
+
+### Fixed
+- Smooth Aiming now also works in the menus, not only in play.
 
 ## [0.2.9 Beta] - 2026-10-31
 

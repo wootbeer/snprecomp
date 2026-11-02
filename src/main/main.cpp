@@ -81,7 +81,7 @@ namespace snp {
 
 static const std::string program_name = "Sin and Punishment Recompiled";
 static const std::u8string program_id = u8"snprecomp";
-static const std::string version_string = "0.2.9";
+static const std::string version_string = "0.2.10";
 
 template <typename... Ts>
 [[noreturn]] static void exit_error(const char* fmt, Ts... args) {
