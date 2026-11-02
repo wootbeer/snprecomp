@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- Maximum Score on the Cheats tab: keeps the score at 999,999,999 (from a
+  GameShark code).
+
 ### Changed
 - Android: on a GPU that can't run the game's renderer (older Mali GPUs like
   the Mali-G52, which lack Vulkan descriptor indexing), the game says so once

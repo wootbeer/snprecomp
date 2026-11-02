@@ -247,6 +247,14 @@ void snp::config::add_extras_tabs() {
     cheats.add_bool_option("infinite_health", "Infinite Health", "", false);
     cheats.add_bool_option("infinite_time", "Infinite Time", "", false);
     cheats.add_bool_option("infinite_continues", "Infinite Continues", "", false);
+    cheats.add_bool_option(
+        "max_score",
+        "Maximum Score",
+        "Keeps the score at 999,999,999 in play."
+        "<br/><br/>"
+        "GameShark code: <b>810D5AA0 3B9A<br/>810D5AA2 C9FF</b>",
+        false
+    );
 }
 
 float snp::config::get_stick_sensitivity() {
@@ -264,6 +272,7 @@ bool snp::config::get_option(Option option) {
         case Option::InfiniteHealth: return get_bool(cheats_id, "infinite_health");
         case Option::InfiniteTime: return get_bool(cheats_id, "infinite_time");
         case Option::InfiniteContinues: return get_bool(cheats_id, "infinite_continues");
+        case Option::MaxScore: return get_bool(cheats_id, "max_score");
     }
     return false;
 }

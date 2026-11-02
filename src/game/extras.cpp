@@ -6,6 +6,7 @@
 //   0x800D5A94  time left (word)
 //   0x800D5A98  health (word, 100 full)
 //   0x800D5C0E  continues left (halfword)
+//   0x800D5AA0  score (word)
 //   0x80075DD0  the progress and settings block saved with the game (20
 //               bytes, copied to the save buffer at 0x80075DAC to save);
 //               bytes 7 - 9 record clearing the game on Easy, Normal and
@@ -24,6 +25,8 @@ namespace {
     constexpr uint32_t time_addr = 0x800D5A94;
     constexpr uint32_t health_addr = 0x800D5A98;
     constexpr uint32_t continues_addr = 0x800D5C0E;
+    constexpr uint32_t score_addr = 0x800D5AA0;
+    constexpr uint32_t max_score = 999999999; // the GameShark code's 0x3B9AC9FF
     constexpr uint32_t clear_flags_addr = 0x80075DD7;
     constexpr uint32_t saved_clear_flags_addr = 0x80075DB3;
     constexpr uint32_t clear_flag_count = 3;
@@ -69,6 +72,10 @@ extern "C" void snp_extras_frame(uint8_t* rdram) {
         if ((word & 0xFFFF) < 9) {
             word = (word & 0xFFFF0000u) | 9;
         }
+    }
+
+    if (get_option(Option::MaxScore) && !snp_in_front_end_menus()) {
+        word_at(rdram, score_addr) = max_score;
     }
 
     bool unlock = get_option(Option::UnlockOptions);

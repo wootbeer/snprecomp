@@ -12,6 +12,7 @@
 
 #include "recomp.h"
 
+#include "snp_mouse.h"
 #include "snp_recomp_hooks.h"
 
 extern "C" void load_overlays(uint32_t rom, int32_t ram_addr, uint32_t size);
@@ -81,6 +82,11 @@ extern "C" void snp_segment_loaded(uint8_t* rdram, int32_t args) {
     }
 
     if (ram == overlay_area_start) {
+        if (rom != overlay_area_rom) {
+            // Which overlay is loaded (each stage has its own), for mapping stages to their
+            // overlays: the per-stage GameShark codes only mean something in their own stage.
+            snp::mouse::aim_log("overlay loaded: ROM 0x%06X", rom);
+        }
         overlay_area_rom = rom;
     }
     unload_overlays(ram, span);

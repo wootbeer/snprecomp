@@ -62,6 +62,7 @@ namespace snp::config {
         InfiniteHealth,
         InfiniteTime,
         InfiniteContinues,
+        MaxScore,
     };
     bool get_option(Option option);
 }
