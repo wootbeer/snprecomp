@@ -37,6 +37,10 @@ bool snp_in_front_end_menus() {
     return overlay_area_rom == front_end_overlay_rom;
 }
 
+uint32_t snp_overlay_area_rom() {
+    return overlay_area_rom;
+}
+
 // args: the loader's request, {rom start, rom end, ram, ...}.
 extern "C" void snp_segment_loaded(uint8_t* rdram, int32_t args) {
     if (!startup_cleanup_done) {

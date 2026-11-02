@@ -3,8 +3,10 @@
 ## [Unreleased]
 
 ### Added
-- Maximum Score on the Cheats tab: keeps the score at 999,999,999 (from a
-  GameShark code).
+- Maximum Score, Invincible and Infinite Air Jumps on the Cheats tab, from the
+  community's GameShark codes. Invincible and Infinite Air Jumps work in every
+  stage (the codes were one per stage); in the last stage Invincible keeps
+  Earth's health full.
 
 ### Changed
 - Android: on a GPU that can't run the game's renderer (older Mali GPUs like

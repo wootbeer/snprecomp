@@ -63,6 +63,8 @@ namespace snp::config {
         InfiniteTime,
         InfiniteContinues,
         MaxScore,
+        Invincible,
+        InfiniteAirJumps,
     };
     bool get_option(Option option);
 }

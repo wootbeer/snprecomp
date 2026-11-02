@@ -255,6 +255,24 @@ void snp::config::add_extras_tabs() {
         "GameShark code: <b>810D5AA0 3B9A<br/>810D5AA2 C9FF</b>",
         false
     );
+    cheats.add_bool_option(
+        "invincible",
+        "Invincible",
+        "Nothing hurts you, in every stage. In the last stage, Earth's health stays full instead."
+        "<br/><br/>"
+        "From the GameShark codes for each stage (0-0: <b>8010BB2B 0001</b>, ..., 3-2: "
+        "<b>801B938B 0001</b>; 3-3: <b>81100E08 C350</b>), applied in the stage each is for.",
+        false
+    );
+    cheats.add_bool_option(
+        "infinite_air_jumps",
+        "Infinite Air Jumps",
+        "Jump again as often as you like while in the air, in every stage."
+        "<br/><br/>"
+        "From the GameShark codes for each stage (0-0: <b>8010BB0C 0000</b>, ..., 3-3: "
+        "<b>801013CC 0000</b>), applied in the stage each is for.",
+        false
+    );
 }
 
 float snp::config::get_stick_sensitivity() {
@@ -273,6 +291,8 @@ bool snp::config::get_option(Option option) {
         case Option::InfiniteTime: return get_bool(cheats_id, "infinite_time");
         case Option::InfiniteContinues: return get_bool(cheats_id, "infinite_continues");
         case Option::MaxScore: return get_bool(cheats_id, "max_score");
+        case Option::Invincible: return get_bool(cheats_id, "invincible");
+        case Option::InfiniteAirJumps: return get_bool(cheats_id, "infinite_air_jumps");
     }
     return false;
 }
