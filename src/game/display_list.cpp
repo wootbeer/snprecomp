@@ -1606,7 +1606,9 @@ extern "C" void snp_display_list_hook(uint8_t* rdram, int32_t task) {
     lines_frame = -1;
     lines_aligned = 0;
     hud_nearest = -1.0f;
-    live_id = snp_in_front_end_menus() ? 0 : snp::mouse::live_reticle_id(rdram, live_x, live_y);
+    // In the menus too: their cursor is the reticle (issue 18: smooth in play, 30 fps in the main
+    // menu). Where the reticle isn't moved, there's nothing to match and nothing changes.
+    live_id = snp::mouse::live_reticle_id(rdram, live_x, live_y);
 
     // A GPU without descriptor indexing whose driver refused every game shader (an older Mali,
     // issue 17) shows nothing in play: say why once, instead of a silent black screen. The game
