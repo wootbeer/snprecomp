@@ -1196,10 +1196,23 @@ namespace {
         auto joins = [&](const HudRect& r) {
             return r.uly < hud_band_bottom && r.lry < hud_element_bottom && r.lrx - r.ulx < 240 * 4;
         };
+        // Which side each piece leans to by itself (0: the middle). A piece of the middle never
+        // joins pieces of a side: TIME's digits touching a side element now and then (issue 20, a
+        // narrower digit opening or closing the gap) took the timer to that side every other second.
+        int32_t lean[max_fill_run];
+        for (uint32_t i = 0; i < n; i++) {
+            const HudRect& r = fill_run[i];
+            uint32_t origin;
+            int32_t offset;
+            lean[i] = !hud_origin(r.ulx, r.uly, r.lrx, r.lry, origin, offset) ? 0 : (origin == origin_left ? -1 : 1);
+        }
         for (uint32_t i = 0; i < n; i++) {
             for (uint32_t j = i + 1; j < n; j++) {
                 const HudRect& a = fill_run[i];
                 const HudRect& b = fill_run[j];
+                if ((lean[i] == 0) != (lean[j] == 0)) {
+                    continue;
+                }
                 if (!framed[i] && !framed[j] && joins(a) && joins(b) && a.ulx <= b.lrx + touch && b.ulx <= a.lrx + touch && a.uly <= b.lry + touch && b.uly <= a.lry + touch) {
                     shape[find(i)] = find(j);
                 }
@@ -1234,6 +1247,39 @@ namespace {
                 }
             }
         }
+
+        // The HUD's elements in the top band and where each went, logged when that changes (the
+        // aim log, snp-aim-log): for finding HUD elements that jump between sides.
+        std::string elements;
+        for (uint32_t i = 0; i < n; i++) {
+            if (framed[i] || find(i) != i) {
+                continue;
+            }
+            uint32_t ulx = 0xFFF, uly = 0xFFF, lrx = 0, lry = 0, pieces = 0;
+            for (uint32_t j = 0; j < n; j++) {
+                if (find(j) == i) {
+                    ulx = std::min(ulx, fill_run[j].ulx);
+                    uly = std::min(uly, fill_run[j].uly);
+                    lrx = std::max(lrx, fill_run[j].lrx);
+                    lry = std::max(lry, fill_run[j].lry);
+                    pieces++;
+                }
+            }
+            if (uly >= hud_band_bottom) {
+                continue;
+            }
+            uint32_t origin;
+            int32_t offset;
+            const char* side = !hud_origin(ulx, uly, lrx, lry, origin, offset) ? "middle" : (origin == origin_left ? "left" : "right");
+            char text[96];
+            snprintf(text, sizeof(text), " [x %u-%u y %u-%u, %u pieces: %s]", ulx / 4, lrx / 4, uly / 4, lry / 4, pieces, side);
+            elements += text;
+        }
+        static std::string last_elements;
+        if (!elements.empty() && elements != last_elements) {
+            snp::mouse::aim_log("hud  top band:%s", elements.c_str());
+        }
+        last_elements = elements;
     }
 
     void add_hud_rect(uint8_t* rdram, uint32_t addr, uint32_t w0, uint32_t w1, uint32_t words) {
