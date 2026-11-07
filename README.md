@@ -89,6 +89,11 @@ Sensitivity are at the top
 of the Controls tab. Mouse buttons, side buttons too, can be bound like keys
 on the keyboard side of the Controls tab.
 
+Rolling is a quick double tap of left or right. **Roll**, **Roll Left** and
+**Roll Right** (unbound at first, at the end of the Controls tab's list) roll
+with one button instead, handy on a light gun with pedals: Roll goes the way
+you're moving, or the way you last moved.
+
 **Android:** a controller or a handheld's controls work as above. Back opens
 the settings. Touch controls (experimental) are set on the **Touch** tab:
 - **Touch Aim**: Point (the reticle goes where you touch, the default), Drag

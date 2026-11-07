@@ -1,0 +1,68 @@
+--- a/recompinput/include/recompinput/input_types.h
++++ b/recompinput/include/recompinput/input_types.h
+@@ -37,10 +37,18 @@
+         DEFINE_INPUT(TAB_LEFT_MENU, 0, "Tab Left (Menu)") \
+         DEFINE_INPUT(TAB_RIGHT_MENU, 0, "Tab Right (Menu)")
+ 
++    // Game inputs that aren't an N64 button or axis; the game reads them itself
++    // (profiles::get_extra_input). Last, so the others keep their values.
++    #define DEFINE_GAME_EXTRA_INPUTS() \
++        DEFINE_INPUT(ROLL, 0, "Roll") \
++        DEFINE_INPUT(ROLL_LEFT, 0, "Roll Left") \
++        DEFINE_INPUT(ROLL_RIGHT, 0, "Roll Right")
++
+     #define DEFINE_ALL_INPUTS() \
+         DEFINE_N64_AXIS_INPUTS() \
+         DEFINE_N64_BUTTON_INPUTS() \
+-        DEFINE_RECOMP_UI_INPUTS()
++        DEFINE_RECOMP_UI_INPUTS() \
++        DEFINE_GAME_EXTRA_INPUTS()
+ 
+     #define DEFINE_INPUT(name, value, readable) name,
+     // - Enum containing every recomp input.
+--- a/recompinput/include/recompinput/profiles.h
++++ b/recompinput/include/recompinput/profiles.h
+@@ -62,6 +62,8 @@
+         int get_or_create_mp_keyboard_profile_index(int player_index);
+         std::string get_string_from_controller_guid(ControllerGUID guid);
+         bool get_n64_input(int player_index, uint16_t* buttons_out, float* x_out, float* y_out);
++        // Whether one of a player's bindings for an input outside the N64's (DEFINE_GAME_EXTRA_INPUTS) is held.
++        bool get_extra_input(int player_index, GameInput input);
+ 
+         bool load_controls_config(const std::filesystem::path& path);
+         bool save_controls_config(const std::filesystem::path& path);
+--- a/recompinput/src/input_types.cpp
++++ b/recompinput/src/input_types.cpp
+@@ -23,6 +23,9 @@
+     descriptions[static_cast<size_t>(GameInput::APPLY_MENU)] = "In the recomp interface, if changes are made to a configuration that requires applying your settings, this will apply the current changes.";
+     descriptions[static_cast<size_t>(GameInput::TAB_LEFT_MENU)] = "In the recomp interface, switches the active tab to the one on the left of the current tab.";
+     descriptions[static_cast<size_t>(GameInput::TAB_RIGHT_MENU)] = "In the recomp interface, switches the active tab to the one on the right of the current tab.";
++    descriptions[static_cast<size_t>(GameInput::ROLL)] = "Rolls the way you're moving (the way you last moved when standing still), as a quick double tap of that way does. For light guns, pedals and other setups where double tapping is awkward.";
++    descriptions[static_cast<size_t>(GameInput::ROLL_LEFT)] = "Rolls left, as a quick double tap of left does.";
++    descriptions[static_cast<size_t>(GameInput::ROLL_RIGHT)] = "Rolls right, as a quick double tap of right does.";
+ #undef DEFINE_INPUT
+     return descriptions;
+ }
+--- a/recompinput/src/profiles.cpp
++++ b/recompinput/src/profiles.cpp
+@@ -423,6 +423,20 @@
+         return true;
+     }
+ 
++    bool profiles::get_extra_input(int player_index, GameInput input) {
++        if (recompinput::game_input_disabled()) {
++            return false;
++        }
++        int profile_index_cont = players::is_single_player_mode() ? profiles::get_sp_controller_profile_index() : players_input_profile_indices[player_index].first;
++        int profile_index_kb = players::is_single_player_mode() ? profiles::get_sp_keyboard_profile_index() : players_input_profile_indices[player_index].second;
++        for (int profile_index : { profile_index_cont, profile_index_kb }) {
++            if (profile_index >= 0 && recompinput::get_input_digital(player_index, input_profiles[profile_index].mappings[(size_t)input])) {
++                return true;
++            }
++        }
++        return false;
++    }
++
+     static void add_input_bindings(json& out, int profile_index, GameInput input) {
+         const std::string& input_name = recompinput::get_game_input_enum_name(input);
+         json& out_array = out[input_name];

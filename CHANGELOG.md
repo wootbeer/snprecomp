@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+- Roll, Roll Left and Roll Right on the Controls tab: roll with one button
+  instead of double tapping (for light guns with pedals and the like). Unbound
+  at first.
+
 ### Fixed
 - Widescreen: the timer could jump to a side of the HUD every other second
   (like in 1-2's elevator) when it touched another HUD element.

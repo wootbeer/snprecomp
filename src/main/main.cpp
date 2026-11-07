@@ -57,6 +57,7 @@
 #include "snp_config.h"
 #include "snp_mod_api.h"
 #include "snp_mouse.h"
+#include "snp_roll.h"
 
 #if defined(SNP_HAS_APP_ICON)
 #include "icon_bytes.h"
@@ -368,13 +369,15 @@ static ultramodern::input::connected_device_info_t get_connected_device_info(int
 
 // The game's controller reads. With Local Multiplayer on, ports 2-4 don't
 // answer, so the game never sees the other players even where it reads a port
-// it was told is empty. On Android player 1 also gets the on-screen touch
+// it was told is empty. The Roll inputs become double taps of a move button
+// (src/main/roll_input.cpp). On Android player 1 also gets the on-screen touch
 // controls, unless one of the game's menus has the input.
 static bool get_n64_input(int player_index, uint16_t* buttons_out, float* x_out, float* y_out) {
     if (player_index != 0 && !recompinput::players::is_single_player_mode()) {
         return false;
     }
     const bool got = recompinput::profiles::get_n64_input(player_index, buttons_out, x_out, y_out);
+    snp::roll::apply(player_index, buttons_out);
 #if defined(__ANDROID__)
     if ((player_index == 0) && !recompinput::game_input_disabled()) {
         snp::android::add_touch_input(buttons_out);
