@@ -7,6 +7,10 @@
   instead of double tapping (for light guns with pedals and the like). Unbound
   at first.
 
+### Changed
+- With Local Multiplayer (Mods) on, player 1 plays with any controller and
+  the keyboard and mouse until players are assigned on the Controls tab.
+
 ### Fixed
 - Widescreen: the timer could jump to a side of the HUD every other second
   (like in 1-2's elevator) when it touched another HUD element.
