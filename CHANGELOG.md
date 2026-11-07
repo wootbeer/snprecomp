@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.11 Beta] - 2026-11-07
 
 ### Added
 - Roll, Roll Left and Roll Right on the Controls tab: roll with one button
@@ -8,7 +8,6 @@
   at first.
 - A controller's extra buttons that SDL doesn't know as gamepad buttons (like
   some 8BitDo controllers' L4, R4, M1 and M2) can be bound, as "Button N".
-
 - Second Player on the General tab (off by default), replacing Local
   Multiplayer (Mods): a second controller joins as player 2 by pressing a
   button, with nothing to assign. **Game's 2-Player Mode** brings back the
@@ -22,7 +21,6 @@
   frame and shrank, and growing ones pulsed between sizes.
 - Widescreen: the timer could jump to a side of the HUD every other second
   (like in 1-2's elevator) when it touched another HUD element.
-  (Without breaking up centred text like PRESS START BUTTON.)
 
 ## [0.2.10 Beta] - 2026-11-02
 
