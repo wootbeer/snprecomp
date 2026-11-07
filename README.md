@@ -94,6 +94,12 @@ Rolling is a quick double tap of left or right. **Roll**, **Roll Left** and
 with one button instead, handy on a light gun with pedals: Roll goes the way
 you're moving, or the way you last moved.
 
+**Two players:** set **Second Player** on the General tab. The next controller
+that presses a button after player 1's becomes player 2, with the same
+controller bindings. **Game's 2-Player Mode** is the game's own (player 1
+moves, player 2 aims and shoots); **Co-op Mod** is for mods that add a second
+player.
+
 **Android:** a controller or a handheld's controls work as above. Back opens
 the settings. Touch controls (experimental) are set on the **Touch** tab:
 - **Touch Aim**: Point (the reticle goes where you touch, the default), Drag

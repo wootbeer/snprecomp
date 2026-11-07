@@ -1,8 +1,9 @@
 // Functions mods can call (include/snp_mod_api.h). A mod declares them with
 // RECOMP_IMPORT("*", ...), as it does the runtime's own (recomp_alloc).
 //
-// snp_get_player_count: how many players have their own input. 1 unless
-// Local Multiplayer (Mods) is on, then the number assigned on the Controls tab.
+// snp_get_player_count: how many players have their own input. 1, or 2 with
+// Second Player on Co-op Mod once a second controller has joined
+// (src/main/second_player.cpp).
 //
 // snp_get_player_pad: a player's controller this moment, filled in like the
 // game's own OSContPad { u16 button; s8 stick_x; s8 stick_y; u8 errno; },
@@ -11,8 +12,8 @@
 // Android's touch controls. While one of the frontend's menus has the input
 // the pad is empty, as it is for the game.
 //
-// With Local Multiplayer on, the game still sees port 1 only
-// (src/main/main.cpp), so a mod is the only thing reading the other players.
+// With Second Player on Co-op Mod, the game sees port 1 only
+// (src/main/main.cpp), so a mod is the only thing reading player 2.
 //
 // snp_set_live_reticle: Smooth Aiming for a mod's crosshair. Once a game
 // frame, after moving it, the mod gives its position (where it draws it this
@@ -48,6 +49,7 @@
 #include "snp_config.h"
 #include "snp_mod_api.h"
 #include "snp_mouse.h"
+#include "snp_second_player.h"
 
 // ultramodern/src/input.cpp, not declared in a header: the stick conversion
 // osContGetReadData uses.
@@ -88,11 +90,7 @@ namespace {
     double overlay_time = 0.0;
 
     uint32_t player_count() {
-        if (recompinput::players::is_single_player_mode()) {
-            return 1;
-        }
-        size_t assigned = recompinput::players::get_number_of_assigned_players();
-        return (uint32_t)(assigned < 1 ? 1 : assigned);
+        return (snp::config::get_second_player() == snp::config::SecondPlayer::Mods && snp::second_player::joined()) ? 2 : 1;
     }
 }
 
@@ -107,8 +105,7 @@ extern "C" void snp_get_player_pad(uint8_t* rdram, recomp_context* ctx) {
 
     uint16_t buttons = 0;
     int8_t stick_x = 0, stick_y = 0;
-    bool has_input = player >= 0 && (uint32_t)player < player_count() &&
-        (player == 0 || recompinput::players::get_player_is_assigned(player));
+    bool has_input = player >= 0 && (uint32_t)player < player_count();
     if (has_input) {
         float x = 0.0f, y = 0.0f;
         recompinput::profiles::get_n64_input(player, &buttons, &x, &y);

@@ -11,9 +11,13 @@ namespace snp::config {
     void add_general_options(recomp::config::Config& general);
 
     bool get_rumble_pak();
-    // Local Multiplayer (Mods): player 2 gets their own controller, read by
-    // mods through src/main/mod_api.cpp; the game still sees port 1 only.
-    bool get_local_multiplayer();
+    // Second Player (src/main/second_player.cpp): who gets a second controller.
+    enum class SecondPlayer : uint32_t {
+        Off = 0,
+        Game = 1, // the game's own 2-player mode, on port 2
+        Mods = 2, // mods only (src/main/mod_api.cpp); the game sees port 1 only
+    };
+    SecondPlayer get_second_player();
 
 #if defined(__ANDROID__)
     // Fills the Touch tab (Android): touch aiming and the on-screen buttons

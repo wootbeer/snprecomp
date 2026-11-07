@@ -1,0 +1,135 @@
+--- a/recompinput/include/recompinput/input_state.h
++++ b/recompinput/include/recompinput/input_state.h
+@@ -43,6 +43,16 @@
+     bool game_input_disabled();
+     bool all_input_disabled();
+     ControllerState &get_controller_state(SDL_JoystickID joystick_id);
++
++    // In single player mode, a second player's controller (a joystick instance ID, -1 for none):
++    // player 1 (controller_num 0) reads every controller but that one, and player 2
++    // (controller_num 1) only that one, with the controller bindings (no keyboard).
++    void set_second_player_controller(SDL_JoystickID joystick_id);
++    SDL_JoystickID get_second_player_controller();
++    // A connected controller other than `except` with a button held, or -1.
++    SDL_JoystickID get_controller_pressing_button(SDL_JoystickID except);
++    bool is_controller_connected(SDL_JoystickID joystick_id);
++    size_t get_connected_controller_count();
+     SDL_GameController *get_controller_from_joystick_id(SDL_JoystickID joystick_id);
+     void add_controller_state(SDL_JoystickID joystick_id, SDL_GameController* controller);
+     void remove_controller_state(SDL_JoystickID joystick_id);
+--- a/recompinput/src/input_state.cpp
++++ b/recompinput/src/input_state.cpp
+@@ -139,6 +139,59 @@
+     }
+ }
+ 
++static std::atomic<SDL_JoystickID> second_player_controller = -1;
++
++void recompinput::set_second_player_controller(SDL_JoystickID joystick_id) {
++    second_player_controller.store(joystick_id);
++}
++
++SDL_JoystickID recompinput::get_second_player_controller() {
++    return second_player_controller.load();
++}
++
++static SDL_JoystickID joystick_id_of(SDL_GameController* controller) {
++    return SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller));
++}
++
++// Single player mode: whether a player reads a controller (see set_second_player_controller).
++// Called with controllers_mutex held.
++static bool single_player_reads(int controller_num, SDL_JoystickID joystick_id) {
++    const SDL_JoystickID second = second_player_controller.load();
++    const bool is_second = second >= 0 && joystick_id == second;
++    return controller_num == 0 ? !is_second : (controller_num == 1 && is_second);
++}
++
++SDL_JoystickID recompinput::get_controller_pressing_button(SDL_JoystickID except) {
++    std::lock_guard lock{ InputState.controllers_mutex };
++    for (SDL_GameController* controller : InputState.detected_controllers) {
++        const SDL_JoystickID id = joystick_id_of(controller);
++        if (id == except) {
++            continue;
++        }
++        for (int button = 0; button < SDL_CONTROLLER_BUTTON_MAX; button++) {
++            if (SDL_GameControllerGetButton(controller, (SDL_GameControllerButton)button)) {
++                return id;
++            }
++        }
++    }
++    return -1;
++}
++
++bool recompinput::is_controller_connected(SDL_JoystickID joystick_id) {
++    std::lock_guard lock{ InputState.controllers_mutex };
++    for (SDL_GameController* controller : InputState.detected_controllers) {
++        if (joystick_id_of(controller) == joystick_id) {
++            return true;
++        }
++    }
++    return false;
++}
++
++size_t recompinput::get_connected_controller_count() {
++    std::lock_guard lock{ InputState.controllers_mutex };
++    return InputState.detected_controllers.size();
++}
++
+ bool controller_button_state(int controller_num, int32_t input_id) {
+     if (input_id >= 0 && input_id < SDL_GameControllerButton::SDL_CONTROLLER_BUTTON_MAX) {
+         SDL_GameControllerButton button = (SDL_GameControllerButton)input_id;
+@@ -147,7 +200,9 @@
+             std::lock_guard lock{ InputState.controllers_mutex };
+             if (recompinput::players::is_single_player_mode()) {
+                 for (const auto &controller : InputState.detected_controllers) {
+-                    ret |= SDL_GameControllerGetButton(controller, button);
++                    if (single_player_reads(controller_num, joystick_id_of(controller))) {
++                        ret |= SDL_GameControllerGetButton(controller, button);
++                    }
+                 }
+             }
+             else {
+@@ -190,6 +245,9 @@
+             std::lock_guard lock{ InputState.controllers_mutex };
+             if (recompinput::players::is_single_player_mode()) {
+                 for (SDL_GameController *controller : InputState.detected_controllers) {
++                    if (!single_player_reads(controller_num, joystick_id_of(controller))) {
++                        continue;
++                    }
+                     float controller_state = gather_axis_state(controller);
+                     if (fabsf(controller_state) > fabsf(ret)) {
+                         ret = controller_state;
+@@ -287,6 +345,9 @@
+         {
+             std::lock_guard lock{ InputState.controllers_mutex };
+             for (const auto &state_pair : InputState.controller_states) {
++                if (!single_player_reads(controller_num, state_pair.first)) {
++                    continue;
++                }
+                 const ControllerState &state = state_pair.second;
+                 cur_rotation_delta[0] += state.rotation_delta[0];
+                 cur_rotation_delta[1] += state.rotation_delta[1];
+--- a/recompinput/src/profiles.cpp
++++ b/recompinput/src/profiles.cpp
+@@ -408,6 +408,10 @@
+             
+             int profile_index_cont = players::is_single_player_mode() ? profiles::get_sp_controller_profile_index() : players_input_profile_indices[player_index].first;
+             int profile_index_kb = players::is_single_player_mode() ? profiles::get_sp_keyboard_profile_index() : players_input_profile_indices[player_index].second;
++            // In single player mode a second player (input_state.h) has a controller only.
++            if (players::is_single_player_mode() && player_index != 0) {
++                profile_index_kb = -1;
++            }
+             check_buttons(profile_index_cont);
+             check_buttons(profile_index_kb);
+ 
+@@ -429,6 +433,9 @@
+         }
+         int profile_index_cont = players::is_single_player_mode() ? profiles::get_sp_controller_profile_index() : players_input_profile_indices[player_index].first;
+         int profile_index_kb = players::is_single_player_mode() ? profiles::get_sp_keyboard_profile_index() : players_input_profile_indices[player_index].second;
++        if (players::is_single_player_mode() && player_index != 0) {
++            profile_index_kb = -1;
++        }
+         for (int profile_index : { profile_index_cont, profile_index_kb }) {
+             if (profile_index >= 0 && recompinput::get_input_digital(player_index, input_profiles[profile_index].mappings[(size_t)input])) {
+                 return true;

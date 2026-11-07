@@ -7,9 +7,13 @@
   instead of double tapping (for light guns with pedals and the like). Unbound
   at first.
 
-### Changed
-- With Local Multiplayer (Mods) on, player 1 plays with any controller and
-  the keyboard and mouse until players are assigned on the Controls tab.
+- Second Player on the General tab (off by default), replacing Local
+  Multiplayer (Mods): a second controller joins as player 2 by pressing a
+  button, with nothing to assign. **Game's 2-Player Mode** brings back the
+  game's own 2-player mode (one player moves, the other aims and shoots),
+  which the game couldn't see before; **Co-op Mod** gives player 2 to mods
+  like the co-op mod. Player 1 keeps the keyboard, mouse and other
+  controllers, and the Controls tab is always the usual one.
 
 ### Fixed
 - Widescreen: the timer could jump to a side of the HUD every other second

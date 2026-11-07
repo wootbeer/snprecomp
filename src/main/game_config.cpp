@@ -10,12 +10,18 @@ namespace {
     const std::string rumble_pak_id = "rumble_pak";
     const std::string mouse_aim_id = "mouse_aim";
     const std::string mouse_sensitivity_id = "mouse_sensitivity_relative";
-    const std::string local_multiplayer_id = "local_multiplayer";
+    const std::string second_player_id = "second_player";
 
     const std::vector<recomp::config::ConfigOptionEnumOption> mouse_aim_options = {
         {0, "Off", "Off"},
         {1, "Relative", "Relative"},
         {2, "Absolute", "Absolute"},
+    };
+
+    const std::vector<recomp::config::ConfigOptionEnumOption> second_player_options = {
+        {0, "Off", "Off"},
+        {1, "Game", "Game's 2-Player Mode"},
+        {2, "Mods", "Co-op Mod"},
     };
 
     // Looked up by id on each read: the Config& create_general_tab() returns
@@ -60,17 +66,22 @@ void snp::config::add_general_options(recomp::config::Config& general) {
         50.0
     );
 
-    // Read once at startup (src/main/main.cpp).
-    general.add_bool_option(
-        local_multiplayer_id,
-        "Local Multiplayer (Mods)",
-        "Gives player 2 their own controller, for mods that add a second player (like the "
-        "co-op mod). The game itself stays one player: without such a mod, player 2's "
-        "controller does nothing."
+    general.add_enum_option(
+        second_player_id,
+        "Second Player",
+        "A second player on a second controller: the next controller that presses a button "
+        "after player 1's joins as player 2, with the same controller bindings. Player 1 keeps "
+        "the keyboard, the mouse and every other controller."
         "<br/><br/>"
-        "<b>Restart the game after changing this.</b> Then open the Controls tab and use "
-        "<b>Assign players</b> to choose each player's controller or keyboard.",
-        false
+        "<b>Game's 2-Player Mode</b>: the game's own, where player 1 moves and player 2 aims "
+        "and shoots. The game sees a second controller plugged in while two are connected."
+        "<br/>"
+        "<b>Co-op Mod</b>: player 2 goes to a mod that adds a second player (like the co-op "
+        "mod); the game itself stays one player."
+        "<br/><br/>"
+        "Player 2 leaves when this is turned off or their controller is disconnected.",
+        second_player_options,
+        0
     );
 
     // Set once the mouse buttons were added to saved keyboard bindings
@@ -98,11 +109,11 @@ float snp::config::get_mouse_sensitivity() {
     return (float)std::get<double>(recompui::config::get_general_config().get_option_value(mouse_sensitivity_id));
 }
 
-bool snp::config::get_local_multiplayer() {
+snp::config::SecondPlayer snp::config::get_second_player() {
     if (!options_added) {
-        return false;
+        return SecondPlayer::Off;
     }
-    return std::get<bool>(recompui::config::get_general_config().get_option_value(local_multiplayer_id));
+    return (SecondPlayer)std::get<uint32_t>(recompui::config::get_general_config().get_option_value(second_player_id));
 }
 
 bool snp::config::get_rumble_pak() {

@@ -737,3 +737,20 @@ player 2 (multi-player keyboard bindings start empty in recompinput), the
 overlay, and a mod's live crosshair (the co-op mod draws both). Player 1's live ID
 changed layout; Smooth Aiming should be checked again with the mouse, the
 stick and touch.
+
+
+### Second Player instead of assigning players
+
+Multi-player mode made the Controls tab a per-player page that needed Assign
+players before any binding could be seen, and gave player 1 a separate
+keyboard profile. The frontend now always stays in single player mode, and
+the Second Player option (General tab: Off, Game's 2-Player Mode, Co-op Mod)
+gives a second controller to player 2 (src/main/second_player.cpp,
+lib-patches/RecompFrontend/0021): player 1's controller is the first to press
+a button, player 2's the next other one to, and leaves when disconnected or
+the option is turned off. Player 1 reads the keyboard, the mouse and every
+controller but player 2's; player 2 only theirs, with the same controller
+bindings. Game's 2-Player Mode plugs port 2 in for the game while two
+controllers are connected, so its own 2-player mode can start; Co-op Mod
+keeps port 2 empty and gives player 2 to mods (snp_get_player_count is 2 once
+one has joined).
