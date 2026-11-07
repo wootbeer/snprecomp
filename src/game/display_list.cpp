@@ -1196,25 +1196,67 @@ namespace {
         auto joins = [&](const HudRect& r) {
             return r.uly < hud_band_bottom && r.lry < hud_element_bottom && r.lrx - r.ulx < 240 * 4;
         };
-        // Which side each piece leans to by itself (0: the middle). A piece of the middle never
-        // joins pieces of a side: TIME's digits touching a side element now and then (issue 20, a
-        // narrower digit opening or closing the gap) took the timer to that side every other second.
-        int32_t lean[max_fill_run];
+        auto touching = [&](uint32_t i, uint32_t j) {
+            const HudRect& a = fill_run[i];
+            const HudRect& b = fill_run[j];
+            return !framed[i] && !framed[j] && joins(a) && joins(b) &&
+                a.ulx <= b.lrx + touch && b.ulx <= a.lrx + touch && a.uly <= b.lry + touch && b.uly <= a.lry + touch;
+        };
+        for (uint32_t i = 0; i < n; i++) {
+            for (uint32_t j = i + 1; j < n; j++) {
+                if (touching(i, j)) {
+                    shape[find(i)] = find(j);
+                }
+            }
+        }
+        // An element that goes to a side is joined again without its pieces of the middle (those
+        // that by themselves would stay in the middle): TIME's digits touching a side element now
+        // and then (issue 20, a narrower digit opening or closing the gap) took the timer to that
+        // side every other second. An element that stays in the middle keeps all its pieces
+        // (PRESS START BUTTON's letters on the left and right of the screen would go apart).
+        bool side_element[max_fill_run] = {};
+        for (uint32_t i = 0; i < n; i++) {
+            if (find(i) != i) {
+                continue;
+            }
+            uint32_t ulx = 0xFFF, uly = 0xFFF, lrx = 0, lry = 0;
+            for (uint32_t j = 0; j < n; j++) {
+                if (find(j) == i) {
+                    ulx = std::min(ulx, fill_run[j].ulx);
+                    uly = std::min(uly, fill_run[j].uly);
+                    lrx = std::max(lrx, fill_run[j].lrx);
+                    lry = std::max(lry, fill_run[j].lry);
+                }
+            }
+            uint32_t origin;
+            int32_t offset;
+            side_element[i] = hud_origin(ulx, uly, lrx, lry, origin, offset);
+        }
+        bool middle_piece[max_fill_run] = {};
+        bool split[max_fill_run] = {};
         for (uint32_t i = 0; i < n; i++) {
             const HudRect& r = fill_run[i];
             uint32_t origin;
             int32_t offset;
-            lean[i] = !hud_origin(r.ulx, r.uly, r.lrx, r.lry, origin, offset) ? 0 : (origin == origin_left ? -1 : 1);
+            middle_piece[i] = !hud_origin(r.ulx, r.uly, r.lrx, r.lry, origin, offset);
+            split[i] = side_element[find(i)];
         }
-        for (uint32_t i = 0; i < n; i++) {
-            for (uint32_t j = i + 1; j < n; j++) {
-                const HudRect& a = fill_run[i];
-                const HudRect& b = fill_run[j];
-                if ((lean[i] == 0) != (lean[j] == 0)) {
-                    continue;
-                }
-                if (!framed[i] && !framed[j] && joins(a) && joins(b) && a.ulx <= b.lrx + touch && b.ulx <= a.lrx + touch && a.uly <= b.lry + touch && b.uly <= a.lry + touch) {
-                    shape[find(i)] = find(j);
+        bool any_split = false;
+        for (uint32_t i = 0; i < n && !any_split; i++) {
+            any_split = split[i] && middle_piece[i];
+        }
+        if (any_split) {
+            for (uint32_t i = 0; i < n; i++) {
+                shape[i] = i;
+            }
+            for (uint32_t i = 0; i < n; i++) {
+                for (uint32_t j = i + 1; j < n; j++) {
+                    if (split[i] && middle_piece[i] != middle_piece[j]) {
+                        continue;
+                    }
+                    if (touching(i, j)) {
+                        shape[find(i)] = find(j);
+                    }
                 }
             }
         }

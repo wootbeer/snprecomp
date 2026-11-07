@@ -10,6 +10,7 @@
 ### Fixed
 - Widescreen: the timer could jump to a side of the HUD every other second
   (like in 1-2's elevator) when it touched another HUD element.
+  (Without breaking up centred text like PRESS START BUTTON.)
 
 ## [0.2.10 Beta] - 2026-11-02
 
