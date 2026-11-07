@@ -6,6 +6,8 @@
 - Roll, Roll Left and Roll Right on the Controls tab: roll with one button
   instead of double tapping (for light guns with pedals and the like). Unbound
   at first.
+- A controller's extra buttons that SDL doesn't know as gamepad buttons (like
+  some 8BitDo controllers' L4, R4, M1 and M2) can be bound, as "Button N".
 
 - Second Player on the General tab (off by default), replacing Local
   Multiplayer (Mods): a second controller joins as player 2 by pressing a

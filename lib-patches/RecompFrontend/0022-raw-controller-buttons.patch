@@ -1,0 +1,84 @@
+--- a/recompinput/include/recompinput/input_types.h
++++ b/recompinput/include/recompinput/input_types.h
+@@ -75,6 +75,11 @@
+     };
+ 
+     
++    // ControllerDigital input_id values from here on are a controller's own buttons that its
++    // SDL gamepad mapping leaves out (extra buttons like an 8BitDo's L4, R4, M1 and M2 on some
++    // controllers and modes): the joystick button number plus this.
++    constexpr int32_t controller_raw_button_base = 0x1000;
++
+     // A single input. Combines the source of the input (see InputType) and a specific key/button/axis.
+     struct InputField {
+         InputType input_type;
+--- a/recompinput/src/input_events.cpp
++++ b/recompinput/src/input_events.cpp
+@@ -121,6 +121,30 @@
+     }
+     queue_if_enabled(event);
+     break;
++    case SDL_EventType::SDL_JOYBUTTONDOWN:
++        // A controller's button its gamepad mapping leaves out can be bound by its number
++        // (controller_raw_button_base); mapped ones come as SDL_CONTROLLERBUTTONDOWN too.
++        if (binding::is_binding() && binding::get_scanning_device() == InputDevice::Controller &&
++            binding::is_controller_being_bound(event->jbutton.which)) {
++            SDL_GameController* controller = SDL_GameControllerFromInstanceID(event->jbutton.which);
++            if (controller == nullptr) {
++                break;
++            }
++            const int raw = event->jbutton.button;
++            bool mapped = false;
++            for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX && !mapped; b++) {
++                SDL_GameControllerButtonBind bind = SDL_GameControllerGetBindForButton(controller, (SDL_GameControllerButton)b);
++                mapped = bind.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON && bind.value.button == raw;
++            }
++            for (int a = 0; a < SDL_CONTROLLER_AXIS_MAX && !mapped; a++) {
++                SDL_GameControllerButtonBind bind = SDL_GameControllerGetBindForAxis(controller, (SDL_GameControllerAxis)a);
++                mapped = bind.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON && bind.value.button == raw;
++            }
++            if (!mapped) {
++                binding::set_scanned_input({ InputType::ControllerDigital, controller_raw_button_base + raw });
++            }
++        }
++        break;
+     case SDL_EventType::SDL_CONTROLLERBUTTONDOWN:
+         if (binding::is_binding() && binding::is_controller_being_bound(event->cbutton.which)) {
+             // TODO: Needs the controller profile index.
+--- a/recompinput/src/input_state.cpp
++++ b/recompinput/src/input_state.cpp
+@@ -193,6 +193,22 @@
+ }
+ 
+ bool controller_button_state(int controller_num, int32_t input_id) {
++    // A button the controller's gamepad mapping leaves out, by its joystick button number.
++    if (input_id >= recompinput::controller_raw_button_base) {
++        const int raw = input_id - recompinput::controller_raw_button_base;
++        bool ret = false;
++        std::lock_guard lock{ InputState.controllers_mutex };
++        for (const auto &controller : InputState.detected_controllers) {
++            const bool reads = recompinput::players::is_single_player_mode()
++                ? single_player_reads(controller_num, joystick_id_of(controller))
++                : controller == recompinput::players::get_player(controller_num).controller;
++            if (reads) {
++                SDL_Joystick* joystick = SDL_GameControllerGetJoystick(controller);
++                ret |= joystick != nullptr && raw < SDL_JoystickNumButtons(joystick) && SDL_JoystickGetButton(joystick, raw);
++            }
++        }
++        return ret;
++    }
+     if (input_id >= 0 && input_id < SDL_GameControllerButton::SDL_CONTROLLER_BUTTON_MAX) {
+         SDL_GameControllerButton button = (SDL_GameControllerButton)input_id;
+         bool ret = false;
+--- a/recompinput/src/input_types.cpp
++++ b/recompinput/src/input_types.cpp
+@@ -258,6 +258,9 @@
+     case InputType::None:
+         return "";
+     case InputType::ControllerDigital:
++        if (input_id >= controller_raw_button_base) {
++            return "Button " + std::to_string(input_id - controller_raw_button_base + 1);
++        }
+         return controller_button_to_string((SDL_GameControllerButton)input_id);
+     case InputType::ControllerAnalog:
+         return controller_axis_to_string(input_id);

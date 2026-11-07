@@ -87,7 +87,12 @@ F1 or Esc opens the settings. Change the controls on the Controls tab.
 Mouse Aim, Mouse Sensitivity, Joystick Deadzone, Analog Aim and Stick
 Sensitivity are at the top
 of the Controls tab. Mouse buttons, side buttons too, can be bound like keys
-on the keyboard side of the Controls tab.
+on the keyboard side of the Controls tab. A controller's extra buttons (back
+paddles, L4/R4, M1/M2 and the like) can be bound too, where the controller
+reports them: as paddles, or as a numbered "Button" if SDL doesn't know them.
+Some controllers don't report them at all in XInput mode (like 8BitDo's on
+Windows); there, map them to another button with the controller's own
+software.
 
 Rolling is a quick double tap of left or right. **Roll**, **Roll Left** and
 **Roll Right** (unbound at first, at the end of the Controls tab's list) roll
