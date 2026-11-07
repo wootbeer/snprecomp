@@ -16,6 +16,8 @@
   controllers, and the Controls tab is always the usual one.
 
 ### Fixed
+- Explosions' spheres at high frame rates: a new one showed up huge for a
+  frame and shrank, and growing ones pulsed between sizes.
 - Widescreen: the timer could jump to a side of the HUD every other second
   (like in 1-2's elevator) when it touched another HUD element.
   (Without breaking up centred text like PRESS START BUTTON.)

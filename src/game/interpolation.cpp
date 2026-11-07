@@ -33,6 +33,9 @@ namespace {
         // Objects: where the display list puts it, its matrix combined with those it's drawn
         // under (src/game/display_list.cpp), for telling apart alike ones at the same pos.
         float place[3] = {};
+        // Objects: how much its matrix scales (its axes' mean length; 0 for a skeleton or an
+        // unscaled-looking one).
+        float scale = 0.0f;
         uint32_t number = 0;
         uint32_t built = 0; // generation
     };
@@ -68,6 +71,8 @@ namespace {
         float axes[3][3];
         float vel[3]; // since the time before
         float place[3];
+        float scale;
+        float growth; // scale change since the time before, a factor
         uint32_t number;
     };
     struct Kind {
@@ -227,7 +232,20 @@ namespace {
                 const Placed& p = placed[j];
                 const float expected[3] = { p.pos[0] + p.vel[0], p.pos[1] + p.vel[1], p.pos[2] + p.vel[2] };
                 const float turn = 4.0f * orientation_difference(now[i]->axes, p.axes);
-                pairs.push_back({ distance2(now[i]->pos, expected) + turn * turn, distance2(now[i]->place, p.place), i, j });
+                // How differently they're scaled, from where the last growth would take the one
+                // from last time, 64 units a doubling: an explosion is alike sphere layers at one
+                // place, each its own size, and by place alone they swapped and pulsed on
+                // in-between frames (issue 19). One more than 3 times larger or smaller than the
+                // one from last time is something else (a new explosion where one just ended:
+                // it showed up huge and shrank).
+                float size = 0.0f;
+                if (now[i]->scale > 0.0f && p.scale > 0.0f) {
+                    if (std::fabs(std::log(now[i]->scale / p.scale)) > std::log(3.0f)) {
+                        continue;
+                    }
+                    size = 64.0f / std::log(2.0f) * std::fabs(std::log(now[i]->scale / (p.scale * p.growth)));
+                }
+                pairs.push_back({ distance2(now[i]->pos, expected) + turn * turn + size * size, distance2(now[i]->place, p.place), i, j });
             }
         }
         // Stable, so equal distances keep the order they were listed in (now, then before):
@@ -247,6 +265,8 @@ namespace {
             memcpy(next[i].axes, now[i]->axes, sizeof(next[i].axes));
             memcpy(next[i].place, now[i]->place, sizeof(next[i].place));
             memset(next[i].vel, 0, sizeof(next[i].vel));
+            next[i].scale = now[i]->scale;
+            next[i].growth = 1.0f;
         }
         for (const Pair& pair : pairs) {
             if (numbered[pair.now] || before_used[pair.before]) {
@@ -256,15 +276,19 @@ namespace {
             before_used[pair.before] = true;
             now[pair.now]->number = placed[pair.before].number;
             if (log != nullptr) {
-                std::fprintf(log, "  #%u at (%.1f %.1f %.1f) <- (%.1f %.1f %.1f) d %.1f, placed (%.1f %.1f %.1f) <- (%.1f %.1f %.1f)\n",
+                std::fprintf(log, "  #%u at (%.1f %.1f %.1f) <- (%.1f %.1f %.1f) d %.1f, scale %.3f <- %.3f, placed (%.1f %.1f %.1f) <- (%.1f %.1f %.1f)\n",
                     now[pair.now]->number,
                     now[pair.now]->pos[0], now[pair.now]->pos[1], now[pair.now]->pos[2],
                     placed[pair.before].pos[0], placed[pair.before].pos[1], placed[pair.before].pos[2], std::sqrt(pair.d),
+                    now[pair.now]->scale, placed[pair.before].scale,
                     now[pair.now]->place[0], now[pair.now]->place[1], now[pair.now]->place[2],
                     placed[pair.before].place[0], placed[pair.before].place[1], placed[pair.before].place[2]);
             }
             for (int k = 0; k < 3; k++) {
                 next[pair.now].vel[k] = now[pair.now]->pos[k] - placed[pair.before].pos[k];
+            }
+            if (now[pair.now]->scale > 0.0f && placed[pair.before].scale > 0.0f) {
+                next[pair.now].growth = std::clamp(now[pair.now]->scale / placed[pair.before].scale, 0.5f, 2.0f);
             }
         }
         auto used = [&](uint32_t n) {
@@ -283,8 +307,8 @@ namespace {
                 now[i]->number = n;
                 numbered[i] = true;
                 if (log != nullptr) {
-                    std::fprintf(log, "  #%u at (%.1f %.1f %.1f) new, placed (%.1f %.1f %.1f)\n", n,
-                        now[i]->pos[0], now[i]->pos[1], now[i]->pos[2], now[i]->place[0], now[i]->place[1], now[i]->place[2]);
+                    std::fprintf(log, "  #%u at (%.1f %.1f %.1f) new, scale %.3f, placed (%.1f %.1f %.1f)\n", n,
+                        now[i]->pos[0], now[i]->pos[1], now[i]->pos[2], now[i]->scale, now[i]->place[0], now[i]->place[1], now[i]->place[2]);
                 }
             }
             next[i].number = now[i]->number;
@@ -366,6 +390,7 @@ extern "C" void snp_interp_object_matrix(uint8_t* rdram, uint32_t fmtx, uint32_t
     inst.key = kind;
     inst.built = generation;
     set_pos(inst, word(0x30), word(0x34), word(0x38));
+    float scale_sum = 0.0f;
     for (int i = 0; i < 3; i++) {
         float len2 = 0.0f;
         for (int j = 0; j < 3; j++) {
@@ -378,7 +403,9 @@ extern "C" void snp_interp_object_matrix(uint8_t* rdram, uint32_t fmtx, uint32_t
         for (int j = 0; j < 3; j++) {
             inst.axes[i][j] *= scale;
         }
+        scale_sum += std::sqrt(len2);
     }
+    inst.scale = std::isfinite(scale_sum) ? scale_sum / 3.0f : 0.0f;
     matrices[mtx] = { kind >> 1, generation, serial };
 }
 

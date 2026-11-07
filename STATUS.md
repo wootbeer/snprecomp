@@ -678,6 +678,19 @@ lookups by outcome and how each kind of object with more than one drawn was
 numbered (on Android, the debug.snp.interplog property or a file
 snp-interp-log in the app's storage).
 
+### Explosions pulsing (issue 19)
+
+Seen in a 60 fps recording of a stage with the rolling mines: an explosion's
+spheres first showed up huge and shrank over a frame or two, then grew with
+their size going big, small, big on alternating displayed frames. An
+explosion is alike sphere layers at one place, each its own size, and
+objects were paired by place and turn only, so layers swapped numbers. The
+guMtxF2L hook now also records how much a matrix scales (its axes' mean
+length), and pairs are weighed by how far that is from where the last growth
+would take it (64 units a doubling); a pair more than 3 times larger or
+smaller isn't made at all (a new explosion where one just ended). The interp
+log shows each object's scale.
+
 ## Round 10: a second player for mods
 
 For the co-op mod (wootbeer/snprecomp-mod-coop): player 2 flies a small drone
