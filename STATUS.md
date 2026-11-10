@@ -767,3 +767,21 @@ bindings. Game's 2-Player Mode plugs port 2 in for the game while two
 controllers are connected, so its own 2-player mode can start; Co-op Mod
 keeps port 2 empty and gives player 2 to mods (snp_get_player_count is 2 once
 one has joined).
+
+## Round 11: CPU use while waiting
+
+BattleTanx GA Recompiled's main game thread spun a whole core at all times
+(its round 188): its yield hook returned at once, so the polling loops called
+it back to back. Checked here the same way: headless (Xvfb, lavapipe, disk
+audio), per-thread CPU with `top -H` on the attract mode and the title screen,
+and gdb backtraces of every thread, five samples.
+
+No game thread spins. On the title screen the busiest, the main thread
+("Game 3"), used 1-2% of a core; every other game thread was asleep in
+`run_next_thread_and_wait` or `resume_thread_and_wait`. The main thread was
+always inside `snp_spin_yield` from `func_80025E44` (its wait on
+D_80068A95), asleep in `wait_for_external_message_timed`:
+`src/game/spin_wait.cpp` has waited up to 1 ms for an external message on
+every call since round 2, so none of the three hooked loops spins. The busy
+threads in the sandbox were lavapipe's (software Vulkan), which a real GPU
+doesn't have. Nothing changed.
