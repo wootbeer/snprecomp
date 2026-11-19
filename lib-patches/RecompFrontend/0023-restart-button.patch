@@ -1,0 +1,234 @@
+--- a/recompui/include/recompui/recompui.h
++++ b/recompui/include/recompui/recompui.h
+@@ -76,6 +76,21 @@
+         ButtonStyle cancel_variant = ButtonStyle::Danger,
+         bool focus_on_cancel = true
+     );
++    // A choice prompt with a third button between the other two.
++    void open_choice_prompt_with_extra(
++        const std::string& header_text,
++        const std::string& content_text,
++        const std::string& confirm_label_text,
++        const std::string& extra_label_text,
++        const std::string& cancel_label_text,
++        std::function<void()> confirm_action,
++        std::function<void()> extra_action,
++        std::function<void()> cancel_action,
++        ButtonStyle confirm_variant,
++        ButtonStyle extra_variant,
++        ButtonStyle cancel_variant,
++        bool focus_on_cancel = true
++    );
+     void open_info_prompt(
+         const std::string& header_text,
+         const std::string& content_text,
+@@ -97,6 +112,13 @@
+     void apply_color_hack();
+     void get_window_size(int& width, int& height);
+     void open_quit_game_prompt();
++    // Restarting the app: the callback (set by the game before recomp::start) quits and starts
++    // the app again. With one set, the menu's header gets a Restart button between Quit and
++    // Close, and the quit prompt (also Alt+F4 or closing the window) a Restart choice.
++    void set_restart_callback(std::function<void()> callback);
++    bool has_restart_callback();
++    void restart_app();
++    void open_restart_game_prompt();
+     bool get_cursor_visible();
+     void set_cursor_visible(bool visible);
+     void update_supported_options();
+--- a/recompui/src/base/ui_state.cpp
++++ b/recompui/src/base/ui_state.cpp
+@@ -35,7 +35,44 @@
+ 
+ static std::atomic_bool cursor_enabled = true;
+ 
++static std::function<void()> restart_callback;
++
++void recompui::set_restart_callback(std::function<void()> callback) {
++    restart_callback = std::move(callback);
++}
++
++bool recompui::has_restart_callback() {
++    return static_cast<bool>(restart_callback);
++}
++
++void recompui::restart_app() {
++    if (restart_callback) {
++        restart_callback();
++    }
++}
++
+ void recompui::open_quit_game_prompt() {
++    if (restart_callback) {
++        recompui::open_choice_prompt_with_extra(
++            "Are you sure you want to quit?",
++            "Any progress since your last save will be lost.",
++            "Quit",
++            "Restart",
++            "Cancel",
++            []() {
++                ultramodern::quit();
++            },
++            []() {
++                recompui::restart_app();
++            },
++            []() {},
++            recompui::ButtonStyle::Danger,
++            recompui::ButtonStyle::Warning,
++            recompui::ButtonStyle::Tertiary,
++            true
++        );
++        return;
++    }
+     recompui::open_choice_prompt(
+         "Are you sure you want to quit?",
+         "Any progress since your last save will be lost.",
+@@ -49,6 +86,22 @@
+         recompui::ButtonStyle::Tertiary,
+         true
+     );
++}
++
++void recompui::open_restart_game_prompt() {
++    recompui::open_choice_prompt(
++        "Are you sure you want to restart?",
++        "The game closes and starts again. Any progress since your last save will be lost.",
++        "Restart",
++        "Cancel",
++        []() {
++            recompui::restart_app();
++        },
++        []() {},
++        recompui::ButtonStyle::Warning,
++        recompui::ButtonStyle::Tertiary,
++        true
++    );
+ }
+ 
+ static std::string primary_font = "";
+--- a/recompui/src/composites/ui_prompt.cpp
++++ b/recompui/src/composites/ui_prompt.cpp
+@@ -14,7 +14,9 @@
+     recompui::Element* prompt_controls;
+     recompui::Button* confirm_button;
+     recompui::Button* cancel_button;
++    recompui::Button* extra_button; // between the two, shown by open_choice_prompt_with_extra only
+     std::function<void()> confirm_action;
++    std::function<void()> extra_action;
+     std::function<void()> cancel_action;
+     std::mutex mutex;
+ } prompt_state;
+@@ -31,6 +33,18 @@
+     recompui::hide_context(prompt_state.ui_context);
+ }
+ 
++void run_extra_callback() {
++    std::function<void()> extra_action;
++    {
++        std::lock_guard lock{ prompt_state.mutex };
++        extra_action = std::move(prompt_state.extra_action);
++    }
++    if (extra_action) {
++        extra_action();
++    }
++    recompui::hide_context(prompt_state.ui_context);
++}
++
+ void run_cancel_callback() {
+     std::function<void()> cancel_action;
+     {
+@@ -115,6 +129,11 @@
+     prompt_state.confirm_button->set_min_width(185.0f, Unit::Dp);
+     prompt_state.confirm_button->add_pressed_callback(run_confirm_callback);
+ 
++    prompt_state.extra_button = context.create_element<Button>(prompt_state.prompt_controls, "", ButtonStyle::Tertiary);
++    prompt_state.extra_button->set_min_width(185.0f, Unit::Dp);
++    prompt_state.extra_button->add_pressed_callback(run_extra_callback);
++    prompt_state.extra_button->set_display(Display::None);
++
+     prompt_state.cancel_button = context.create_element<Button>(prompt_state.prompt_controls, "", ButtonStyle::Danger);
+     prompt_state.cancel_button->set_min_width(185.0f, Unit::Dp);
+     prompt_state.cancel_button->add_pressed_callback(run_cancel_callback);
+@@ -166,6 +185,8 @@
+     prompt_state.prompt_controls->set_display(Display::Flex);
+     prompt_state.confirm_button->set_display(Display::Flex);
+     prompt_state.cancel_button->set_display(Display::Flex);
++    prompt_state.extra_button->set_display(Display::None);
++    prompt_state.extra_action = nullptr;
+     prompt_state.confirm_button->set_text(confirm_label_text);
+     prompt_state.cancel_button->set_text(cancel_label_text);
+     prompt_state.confirm_action = confirm_action;
+@@ -182,6 +203,36 @@
+     show_prompt(prev_cancel_action, focus_on_cancel);
+ }
+ 
++void recompui::open_choice_prompt_with_extra(
++    const std::string& header_text,
++    const std::string& content_text,
++    const std::string& confirm_label_text,
++    const std::string& extra_label_text,
++    const std::string& cancel_label_text,
++    std::function<void()> confirm_action,
++    std::function<void()> extra_action,
++    std::function<void()> cancel_action,
++    ButtonStyle confirm_variant,
++    ButtonStyle extra_variant,
++    ButtonStyle cancel_variant,
++    bool focus_on_cancel
++) {
++    open_choice_prompt(header_text, content_text, confirm_label_text, cancel_label_text,
++        std::move(confirm_action), std::move(cancel_action), confirm_variant, cancel_variant, focus_on_cancel);
++
++    std::lock_guard lock{ prompt_state.mutex };
++    ContextId prev_context = try_close_current_context();
++    prompt_state.ui_context.open();
++    prompt_state.extra_button->set_display(Display::Flex);
++    prompt_state.extra_button->set_text(extra_label_text);
++    prompt_state.extra_button->apply_button_style(extra_variant);
++    prompt_state.extra_action = std::move(extra_action);
++    prompt_state.ui_context.close();
++    if (prev_context != ContextId::null()) {
++        prev_context.open();
++    }
++}
++
+ void recompui::open_info_prompt(
+     const std::string& header_text,
+     const std::string& content_text,
+@@ -202,6 +253,8 @@
+     prompt_state.prompt_controls->set_display(Display::Flex);
+     prompt_state.confirm_button->set_display(Display::None);
+     prompt_state.cancel_button->set_display(Display::Flex);
++    prompt_state.extra_button->set_display(Display::None);
++    prompt_state.extra_action = nullptr;
+     prompt_state.cancel_button->set_text(okay_label_text);
+     prompt_state.confirm_action = {};
+     prompt_state.cancel_action = okay_action;
+@@ -234,6 +287,8 @@
+     prompt_state.prompt_controls->set_display(Display::None);
+     prompt_state.confirm_button->set_display(Display::None);
+     prompt_state.cancel_button->set_display(Display::None);
++    prompt_state.extra_button->set_display(Display::None);
++    prompt_state.extra_action = nullptr;
+     prompt_state.confirm_action = {};
+     prompt_state.cancel_action = {};
+ 
+--- a/recompui/src/config/ui_config.cpp
++++ b/recompui/src/config/ui_config.cpp
+@@ -184,6 +184,16 @@
+                 ultramodern::quit();
+             }
+         });
++        if (recompui::has_restart_callback()) {
++            auto restart_button = config_modal->modal_root_context.create_element<IconButton>(header_right, "icons/Reset.svg", ButtonStyle::Basic);
++            restart_button->add_pressed_callback([]() {
++                if (ultramodern::is_game_started()) {
++                    recompui::open_restart_game_prompt();
++                } else {
++                    recompui::restart_app();
++                }
++            });
++        }
+         auto close_button = config_modal->modal_root_context.create_element<IconButton>(header_right, "icons/X.svg", ButtonStyle::Basic);
+         close_button->add_pressed_callback([]() {
+             config::close();

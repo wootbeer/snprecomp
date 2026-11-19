@@ -5,7 +5,8 @@
 // Addresses (the game's own variables, the same for every supported ROM):
 //   0x800D5A94  time left (word)
 //   0x800D5A98  health (word, 100 full)
-//   0x800D5C0E  continues left (halfword)
+//   0x800D5C0E  the difficulty (byte, 0-2; set from the saved settings), once
+//               thought to be the continues left (issue 22)
 //   0x800D5AA0  score (word)
 //   per stage: each stage's overlay (load table entries 4-13 are stages 0-0 to
 //               3-3) is followed by the player's data, whose invincibility
@@ -31,7 +32,6 @@ uint32_t snp_overlay_area_rom(); // src/game/overlay_loader.cpp: the loaded over
 namespace {
     constexpr uint32_t time_addr = 0x800D5A94;
     constexpr uint32_t health_addr = 0x800D5A98;
-    constexpr uint32_t continues_addr = 0x800D5C0E;
     constexpr uint32_t score_addr = 0x800D5AA0;
     constexpr uint32_t load_table_addr = 0x800597AC; // {rom, vram, text end, data end, bss end}
     constexpr uint32_t first_stage_entry = 4; // 0-0
@@ -82,12 +82,6 @@ extern "C" void snp_extras_frame(uint8_t* rdram) {
         uint32_t& time = word_at(rdram, time_addr);
         if (time > 0 && time < 99) {
             time = 99;
-        }
-    }
-    if (get_option(Option::InfiniteContinues)) {
-        uint32_t& word = word_at(rdram, continues_addr & ~3u); // the halfword is the word's low half
-        if ((word & 0xFFFF) < 9) {
-            word = (word & 0xFFFF0000u) | 9;
         }
     }
 

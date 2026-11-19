@@ -7,6 +7,7 @@
 // - a best-effort list of game functions found on the host stack (callers)
 // Release builds have no console, so a message box points testers at the log.
 #include <algorithm>
+#include <atomic>
 #include <cinttypes>
 #include <csignal>
 #include <cstdint>
@@ -30,6 +31,11 @@
 #include "recomp.h"
 #include "rt64_device_summary.h"
 #include "librecomp/sections.h"
+
+#include "snp_restart.h"
+
+// Set by the runtime's ultramodern::quit() (librecomp/src/recomp.cpp) as soon as quitting starts.
+extern std::atomic_bool exited;
 
 namespace {
     struct GameFunc {
@@ -83,7 +89,15 @@ namespace {
     // can still be running; their next access faults. While the game runs,
     // the whole 512 MB KSEG0 window is mapped, so a fault inside it can only
     // be that -- exit quietly instead of reporting a crash.
+    // Also anything once quitting has started: the game's saves are already written, and a
+    // library failing to shut down (the Linux sandbox's software Vulkan aborted in D-Bus) isn't
+    // worth a crash report. If Restart was chosen, the game still starts again
+    // (src/main/restart.cpp).
     bool is_shutdown_fault(bool has_access, uintptr_t access) {
+        if (exited.load()) {
+            snp::restart::relaunch_if_requested();
+            return true;
+        }
         return has_access && in_rdram(access) && (access - (uintptr_t)rdram_base) < 0x20000000ull;
     }
 

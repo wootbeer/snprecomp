@@ -246,7 +246,9 @@ void snp::config::add_extras_tabs() {
     recomp::config::Config& cheats = recompui::config::create_config_tab("Cheats", cheats_id, false);
     cheats.add_bool_option("infinite_health", "Infinite Health", "", false);
     cheats.add_bool_option("infinite_time", "Infinite Time", "", false);
-    cheats.add_bool_option("infinite_continues", "Infinite Continues", "", false);
+    // Infinite Continues, hidden: its address (0x800D5C0E) turned out to be the difficulty, so it
+    // never worked (issue 22). Kept so saved settings still load.
+    cheats.add_bool_option("infinite_continues", "", "", false, true);
     cheats.add_bool_option(
         "max_score",
         "Maximum Score",

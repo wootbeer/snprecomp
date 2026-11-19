@@ -57,6 +57,7 @@
 #include "snp_config.h"
 #include "snp_mod_api.h"
 #include "snp_mouse.h"
+#include "snp_restart.h"
 #include "snp_roll.h"
 #include "snp_second_player.h"
 
@@ -474,6 +475,7 @@ static void start_quit_watchdog() {
         std::remove("running");
 #endif
         std::this_thread::sleep_for(std::chrono::seconds(3));
+        snp::restart::relaunch_if_requested();
         fflush(stdout);
         fflush(stderr);
         std::_Exit(EXIT_SUCCESS);
@@ -562,6 +564,7 @@ int main(int argc, char** argv) {
     snp::add_mouse_button_bindings();
 
     snp::register_mod_exports();
+    snp::restart::install(argc, argv);
 
     // Rice Video texture packs (an emulator's hires_texture folder) go in
     // texture_packs; RT64 packs are mods and take priority over them.
@@ -638,6 +641,7 @@ int main(int argc, char** argv) {
     // returns, so running static destructors/atexit handlers underneath
     // them can crash on quit -- exit directly instead (same approach as
     // other N64Recomp projects' main()).
+    snp::restart::relaunch_if_requested();
     fflush(stdout);
     fflush(stderr);
     std::_Exit(EXIT_SUCCESS);

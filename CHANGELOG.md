@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Restart, in the menu's header between Quit and Close and in the quit prompt
+  (Alt+F4 or closing the window): the game closes and starts again, handy
+  after changing mods. Windows and Linux.
+
+### Fixed
+- Infinite Continues is gone from the Cheats tab: it never worked (its address
+  is the difficulty), and on Easy it changed a byte next to it.
+- Linux: a crash while quitting (seen with software Vulkan) no longer writes a
+  crash report.
+
 ## [0.2.11 Beta] - 2026-11-07
 
 ### Added

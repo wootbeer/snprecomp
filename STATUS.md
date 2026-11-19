@@ -785,3 +785,24 @@ D_80068A95), asleep in `wait_for_external_message_timed`:
 every call since round 2, so none of the three hooked loops spins. The busy
 threads in the sandbox were lavapipe's (software Vulkan), which a real GPU
 doesn't have. Nothing changed.
+
+## Round 12: Restart; Infinite Continues
+
+Restart (issue 22): `recompui::set_restart_callback` (lib-patches/RecompFrontend/0023) adds a
+Restart icon button between Quit and Close in the menu's header, and a middle Restart choice to
+the quit prompt (also opened by Alt+F4 or closing the window). The callback
+(src/main/restart.cpp) quits as Quit does; right before the process ends (main's end or the quit
+watchdog) it starts the game again with the same command line and working folder
+(CreateProcessW on Windows, posix_spawn of /proc/self/exe on Linux). Not on Android. Tested
+headless on Linux: the new process starts and reaches the attract mode.
+
+Quitting in the sandbox always aborted in libdbus (lavapipe's shutdown without a session bus,
+on the graphics thread), so the old process never reached the relaunch. Any fault once quitting
+has started now counts as a shutdown fault (`is_shutdown_fault`, src/main/crash_handler.cpp):
+it relaunches if Restart was chosen and exits quietly, with no crash report.
+
+Infinite Continues never worked: 0x800D5C0E, written as a halfword, is the difficulty (a byte,
+0-2, loaded from the saved settings; it indexes a per-difficulty table at 0x800E44D0 and scales
+by `2 - difficulty`). The halfword write only happened on Easy, setting the next byte to 9. The
+option is hidden (kept so saved settings load) and does nothing until the real continue count
+is found.
