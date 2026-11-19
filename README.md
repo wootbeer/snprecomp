@@ -53,14 +53,17 @@ Start the game, pick **Load ROM** and select your file. It only has to be
 done once. You can keep one Japanese and one English ROM, each with its own
 saves, and pick either one with **Start Game**. **Change ROM** swaps one out.
 
-Add a blank portable.txt in the application's folder to make it portable,
-if you want to save settings and saves locally.
+Settings, saves and mods are kept in the game's own folder (it's portable):
+a new install puts a `portable.txt` there on first start. Delete it to keep
+them in your user folder instead (`%LOCALAPPDATA%\snprecomp` on Windows,
+`~/.config/snprecomp` on Linux). An install from before 0.2.12 that already
+uses the user folder keeps using it; add a `portable.txt` to switch.
 
 ## Download
 Get the latest build from the [Releases](https://github.com/wootbeer/snprecomp/releases) page.
 - **Windows:** unzip it anywhere and run `SnPRecompiled.exe`.
 - **Linux / Steam Deck (untested):** extract the `.tar.gz` and run
-  `SnPRecompiled.sh`. Settings and saves go in `~/.config/snprecomp`.
+  `SnPRecompiled.sh`.
 
 - **Android:** install `SnPRecompiled-<version>-android.apk` (allow installs
   from your browser or file manager when asked). Needs Android 9 or newer, a
@@ -71,6 +74,22 @@ Get the latest build from the [Releases](https://github.com/wootbeer/snprecomp/r
 
 On Steam Deck, in Desktop Mode, use **Add to Steam** on the launcher (or "Add a
 Non-Steam Game" in Steam), then play it from Gaming Mode.
+
+## Command line
+
+| Option | What it does |
+|---|---|
+| `--game jp`, `--game en` | Start the Japanese ROM or the translation straight away (`--game snp`: whichever is loaded). |
+| `--rom <file>` | Load that ROM, as **Load ROM** does, and start it. |
+| `--set <tab.setting=value>` | Change a setting and save it, as the menu does. Repeat for more. The tab can be left out when only one tab has the setting. |
+| `--fullscreen`, `--windowed` | The window mode. |
+| `--list-settings` | List every setting, its values and its current value. |
+| `--help` | List the options. |
+
+For example, as Steam launch options:
+`--game en --fullscreen --set graphics.rr_option=display --set second_player=game`.
+Values can be written as the menu shows them (`--set second_player="Game's 2-Player Mode"`).
+On Windows, run it from a command prompt to see `--list-settings` and `--help`.
 
 ## Controls
 F1 or Esc opens the settings. Change the controls on the Controls tab.

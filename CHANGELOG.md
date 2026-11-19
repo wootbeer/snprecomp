@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added
+- Portable by default: a new install keeps its settings, saves and mods in
+  the game's folder (`portable.txt`). Installs that already use the user
+  folder stay as they are; delete or add `portable.txt` to switch.
+- Command line options: `--game jp`/`en` to start straight away, `--rom <file>`
+  to load a ROM and start it, `--set tab.setting=value` for any setting,
+  `--fullscreen`/`--windowed`, `--list-settings` and `--help`.
 - Restart, in the menu's header between Quit and Close and in the quit prompt
   (Alt+F4 or closing the window): the game closes and starts again, handy
   after changing mods. Windows and Linux.

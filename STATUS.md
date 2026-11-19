@@ -806,3 +806,22 @@ Infinite Continues never worked: 0x800D5C0E, written as a halfword, is the diffi
 by `2 - difficulty`). The halfword write only happened on Easy, setting the next byte to 9. The
 option is hidden (kept so saved settings load) and does nothing until the real continue count
 is found.
+
+## Round 13: portable by default; command line
+
+Portable by default (src/main/portable.cpp): a new install (no portable.txt, and no settings
+folder in the user's folders yet) creates portable.txt next to the game, so
+`get_app_folder_path` uses the game's folder. Existing installs with a user-folder settings
+folder are left alone; `APP_FOLDER_PATH` on Linux is respected; a folder that can't be written
+keeps the user folder. The game also changes to the folder with assets/ in it when started from
+elsewhere, so portable.txt and the relative paths are found (tested from the parent folder).
+
+Command line (src/main/command_line.cpp), handled after the configs are loaded and before the
+runtime starts: `--set tab.setting=value` (any visible option of the General, Graphics, Sound,
+Enhancements and Cheats tabs, plus Touch on Android; enums by key or display name, numbers
+clamped, bools on/off; saved like a menu change, graphics through its apply/save path),
+`--fullscreen`/`--windowed`, `--rom <file>` (`recomp::select_rom` as Load ROM, then `--game`),
+`--game jp`/`en` passed to the runtime as the full IDs, `--list-settings`, `--help`. Unused
+options are listed in a message box. Windows release builds attach to the parent console for
+printing. Tested headless: settings saved, bad names and values reported, `--rom` loaded the ROM
+and went straight into the intro. Controls bindings and mods aren't settable this way.

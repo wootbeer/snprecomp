@@ -54,6 +54,7 @@
 #include "librecomp/helpers.hpp"
 
 #include "snp_android.h"
+#include "snp_command_line.h"
 #include "snp_config.h"
 #include "snp_mod_api.h"
 #include "snp_mouse.h"
@@ -502,6 +503,7 @@ int main(int argc, char** argv) {
 #if defined(__ANDROID__)
     snp::android::startup();
 #endif
+    snp::portable::use_game_folder();
     std::set_terminate(report_unhandled_exception_and_abort);
 
     recomp::Version project_version{};
@@ -536,6 +538,7 @@ int main(int argc, char** argv) {
 
     recompui::register_primary_font("Exo2.ttf", "Exo 2");
 
+    snp::portable::choose_default();
     recomp::register_config_path(recompui::file::get_app_folder_path());
 
     for (const auto& game : supported_games) {
@@ -562,6 +565,13 @@ int main(int argc, char** argv) {
     snp::config::add_extras_tabs();
     recompui::config::finalize();
     snp::add_mouse_button_bindings();
+    // Settings from the command line, --rom and --game's short names (src/main/command_line.cpp).
+    std::vector<std::string> runtime_args = snp::command_line::process(argc, argv);
+    std::vector<char*> runtime_argv;
+    for (std::string& arg : runtime_args) {
+        runtime_argv.push_back(arg.data());
+    }
+    runtime_argv.push_back(nullptr);
 
     snp::register_mod_exports();
     snp::restart::install(argc, argv);
@@ -620,8 +630,8 @@ int main(int argc, char** argv) {
     start_quit_watchdog();
 
     recomp::start({
-        .argc = argc,
-        .argv = argv,
+        .argc = (int)runtime_args.size(),
+        .argv = runtime_argv.data(),
         .project_version = project_version,
         .window_handle = {}, // created by gfx_callbacks.create_window
         .rsp_callbacks = rsp_callbacks,
