@@ -165,6 +165,10 @@ namespace {
                     return false;
                 }
                 const auto& n = std::get<recomp::config::ConfigOptionNumber>(option.variant);
+                // To the slider's steps and range, as the menu would give it.
+                if (n.step > 0.0) {
+                    v = n.min + std::round((v - n.min) / n.step) * n.step;
+                }
                 if (n.max > n.min) {
                     v = std::clamp(v, n.min, n.max);
                 }

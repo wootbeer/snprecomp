@@ -12,7 +12,7 @@ namespace snp::command_line {
     std::vector<std::string> process(int argc, char** argv);
 }
 
-// Portable by default (src/main/command_line.cpp's sibling, src/main/portable.cpp).
+// Portable by default (src/main/portable.cpp).
 namespace snp::portable {
     // Desktop: when started from elsewhere, works from the folder with
     // assets/ in it (the exe's), so portable.txt, saves and logs are found
