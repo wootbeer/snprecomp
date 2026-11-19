@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.12 Beta] - 2026-11-19
 
 ### Added
 - Portable by default: a new install keeps its settings, saves and mods in
