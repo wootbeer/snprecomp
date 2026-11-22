@@ -6,6 +6,7 @@
 // the app is started by the system.
 #include <atomic>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,9 @@ namespace {
     std::atomic_bool relaunched = false;
 #if !defined(_WIN32) && !defined(__ANDROID__)
     std::vector<std::string> arguments;
+    // The program's own path. Spawning /proc/self/exe itself works, but the new process is then
+    // named "exe" (in top, task managers and pkill), so the link is read while it's still valid.
+    std::string program = "/proc/self/exe";
 #endif
 }
 
@@ -36,6 +40,11 @@ void snp::restart::install(int argc, char** argv) {
 #else
 #if !defined(_WIN32)
     arguments.assign(argv, argv + argc);
+    std::error_code ec;
+    std::filesystem::path self = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (!ec && !self.empty()) {
+        program = self.string();
+    }
 #else
     (void)argc;
     (void)argv;
@@ -77,7 +86,7 @@ void snp::restart::relaunch_if_requested() {
     }
     argv.push_back(nullptr);
     pid_t pid;
-    int error = posix_spawn(&pid, "/proc/self/exe", nullptr, nullptr, argv.data(), environ);
+    int error = posix_spawn(&pid, program.c_str(), nullptr, nullptr, argv.data(), environ);
     if (error != 0) {
         std::fprintf(stderr, "Restart: couldn't start the game again (error %d)\n", error);
     }

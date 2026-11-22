@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- Linux: after Restart, the game showed up as "exe" instead of SnPRecompiled
+  in task managers and `pkill`.
+
 ## [0.2.12 Beta] - 2026-11-19
 
 ### Added
